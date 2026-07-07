@@ -313,6 +313,24 @@
   }
   .btn-resume:hover { border-color: var(--amber); background: rgba(255, 180, 84, 0.08); }
 
+  .dash-jobs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; }
+  .btn-newjob {
+    background: var(--panel-2); border: 1px solid var(--amber-dim); color: var(--amber);
+    border-radius: 6px; padding: 5px 12px; font-family: var(--mono); font-size: 12px; font-weight: 600;
+  }
+  .btn-newjob:hover { border-color: var(--amber); background: rgba(255, 180, 84, 0.08); }
+  .class-card-right { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .job-icon { background: none; border: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; }
+  .job-icon:hover { color: var(--amber); }
+  .job-icon.job-del:hover { color: var(--red); }
+  .paper-sat { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .paper-sat input[type="date"] {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 12px; padding: 5px 8px;
+  }
+  .paper-sat input[type="date"]:focus { outline: none; border-color: var(--cyan); }
+  .paper-sat-hint { color: var(--amber); font-size: 11px; }
+
   /* ---------- Responsive ---------- */
   @media (max-width: 980px) {
     #workspaceView { grid-template-columns: 1fr; }
@@ -386,16 +404,6 @@
     <textarea id="newRoster" placeholder="Sophia King&#10;Liam Patel&#10;Aroha Ngata"></textarea>
     <button class="btn" id="addClassBtn">Add class</button>
 
-    <h3>Assessments</h3>
-    <div id="assessmentList"></div>
-    <label for="newAssessClass">Class</label>
-    <select id="newAssessClass"></select>
-    <label for="newAssessName">Assessment name</label>
-    <input type="text" id="newAssessName" placeholder="e.g. Term 2 Test, Practical Report">
-    <label for="newAssessDue">Due date (optional; drives the daily target)</label>
-    <input type="date" id="newAssessDue">
-    <button class="btn" id="addAssessBtn">Add assessment</button>
-
     <h3>Calibration check</h3>
     <label for="calibSelect">Remind me to re-read my first marked paper every…</label>
     <select id="calibSelect">
@@ -419,6 +427,25 @@
   </div>
 </div>
 
+<!-- New / edit marking job modal -->
+<div class="overlay" id="jobOverlay">
+  <div class="modal">
+    <h2 id="jobModalTitle">New marking job</h2>
+    <label for="jobClass">Class</label>
+    <select id="jobClass"></select>
+    <label for="jobName">Assessment name</label>
+    <input type="text" id="jobName" placeholder="e.g. Term 2 Test, Practical Report">
+    <label for="jobSat">Date sat (optional)</label>
+    <input type="date" id="jobSat">
+    <label for="jobDue">Date marking is due (optional; drives the daily target)</label>
+    <input type="date" id="jobDue">
+    <div class="modal-actions">
+      <button class="btn btn-done" id="jobSaveBtn">Add job</button>
+      <button class="btn" id="jobCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -430,7 +457,7 @@
 const KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
 
-const DEFAULT_MARK = () => ({ status: 'unmarked', tags: [], note: '', markedAt: null });
+const DEFAULT_MARK = () => ({ status: 'unmarked', tags: [], note: '', markedAt: null, satOn: '' });
 
 const blank = () => ({
   classes: [],          // {id, name, students:[{id, first, last, label}]}
@@ -544,7 +571,9 @@ function assessmentStats(a) {
   // stable through the day instead of shrinking as you work.
   const dailyTarget = (dl && dl > 0) ? Math.ceil((remaining + markedToday) / dl) : null;
   const complete = total > 0 && remaining === 0;
-  return { a, cls, total, marked, missing, markedToday, denom, remaining, pct, dl, dailyTarget, complete };
+  // A job whose sit date is still in the future has nothing to mark yet.
+  const upcoming = !!a.dateSat && a.dateSat > todayStr() && !complete;
+  return { a, cls, total, marked, missing, markedToday, denom, remaining, pct, dl, dailyTarget, complete, upcoming };
 }
 
 // Count how many papers in one assessment carry a given tag.
@@ -620,8 +649,8 @@ function renderDashboard() {
   }
   if (!S.assessments.length) {
     el.innerHTML = `<div class="dash-empty">${S.classes.length} class${S.classes.length === 1 ? '' : 'es'} ready.
-      Add an assessment to start marking.<br>
-      <button class="btn" onclick="openSettings()">Add an assessment</button></div>`;
+      Add a marking job to start.<br>
+      <button class="btn" onclick="openJobModal()">Add a marking job</button></div>`;
     return;
   }
 
@@ -637,16 +666,24 @@ function renderDashboard() {
   const nextDue = dued.length ? dued[0] : '';
   const onTrack = targetToday > 0 && markedToday >= targetToday;
 
-  // Jobs sorted: unfinished first, then by due date (undated last), then oldest.
+  // Jobs sorted into three groups: markable now, then upcoming (not yet sat),
+  // then completed. Within the first and last, by due date (undated last);
+  // upcoming sorts by its sit date.
+  const rank = x => x.complete ? 2 : (x.upcoming ? 1 : 0);
   const order = list.slice().sort((x, y) => {
-    if (x.complete !== y.complete) return x.complete ? 1 : -1;
+    const rr = rank(x) - rank(y);
+    if (rr) return rr;
+    if (rank(x) === 1) {
+      return (x.a.dateSat || '9999-99-99').localeCompare(y.a.dateSat || '9999-99-99') || (x.a.createdAt || '').localeCompare(y.a.createdAt || '');
+    }
     const dx = x.a.dueDate || '9999-99-99', dy = y.a.dueDate || '9999-99-99';
     return dx.localeCompare(dy) || (x.a.createdAt || '').localeCompare(y.a.createdAt || '');
   });
 
   el.innerHTML = `
     <section class="dash-section">
-      <div class="dash-h">Overall progress</div>
+      <div class="dash-jobs-head"><span class="dash-h" style="margin-bottom:0;">Overall progress</span>
+        <button class="btn-newjob" onclick="copyOverallSummary()">Copy overall summary</button></div>
       <div class="dash-hero-top">
         <span class="dash-bignum">${pct}%</span>
         <span class="dash-bigsub">${marked} of ${denom} papers marked${missing ? ` · ${missing} not submitted` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
@@ -663,7 +700,8 @@ function renderDashboard() {
     </section>
 
     <section class="dash-section">
-      <div class="dash-h">Marking jobs</div>
+      <div class="dash-jobs-head"><span class="dash-h" style="margin-bottom:0;">Marking jobs</span>
+        <button class="btn-newjob" onclick="openJobModal()">+ New marking job</button></div>
       ${order.map(jobCard).join('')}
     </section>`;
 }
@@ -675,11 +713,15 @@ function tile(label, value, cls) {
 
 function jobCard(x) {
   const a = x.a, cls = x.cls;
-  const dueTxt = a.dueDate
-    ? `${esc(fmtDate(a.dueDate))}${x.dl !== null ? ` · ${x.dl} day${x.dl === 1 ? '' : 's'} left` : ''}`
-    : 'no due date';
+  const dateParts = [];
+  if (a.dateSat) dateParts.push(`sat ${esc(fmtDate(a.dateSat))}`);
+  dateParts.push(a.dueDate
+    ? `due ${esc(fmtDate(a.dueDate))}${x.dl !== null ? ` · ${x.dl} day${x.dl === 1 ? '' : 's'} left` : ''}`
+    : 'no due date');
+  const datesTxt = dateParts.join(' · ');
   let pace;
   if (x.complete) pace = `<span class="cc-chip cc-done">Complete ✓</span>`;
+  else if (x.upcoming) pace = `<span class="cc-chip">upcoming</span>`;
   else if (x.dl === 0) pace = `<span class="cc-chip miss">due now · ${x.remaining} left</span>`;
   else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
   else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
@@ -688,9 +730,13 @@ function jobCard(x) {
   return `<div class="class-card">
     <div class="class-card-top">
       <span class="class-card-name">${esc(a.name)}<span class="job-class">${esc(cls ? cls.name : '')}</span></span>
-      <span class="class-card-frac">${x.marked}/${x.denom}${x.denom ? ` · ${x.pct}%` : ''}</span>
+      <span class="class-card-right">
+        <span class="class-card-frac">${x.marked}/${x.denom}${x.denom ? ` · ${x.pct}%` : ''}</span>
+        <button class="job-icon" title="Edit job" onclick="openJobModal('${a.id}')">✎</button>
+        <button class="job-icon job-del" title="Delete job" onclick="deleteAssessment('${a.id}')">×</button>
+      </span>
     </div>
-    <div class="job-due">${dueTxt}</div>
+    <div class="job-due">${datesTxt}</div>
     <div class="progress-track"><div class="progress-fill" style="width:${x.pct}%"></div></div>
     <div class="class-card-foot">${pace}${missChip}${btn}</div>
   </div>`;
@@ -784,6 +830,8 @@ function renderPaper() {
     <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
     <div class="paper-tags">${tagsHtml}</div>
     <textarea id="noteInput" placeholder="Optional note for this paper (goes into the feedback prompt)">${esc(m.note || '')}</textarea>
+    <div class="paper-sat">Sat on <input type="date" id="satInput" value="${esc(m.satOn || a.dateSat || '')}">
+      <span class="paper-sat-hint">${(m.satOn && a.dateSat && m.satOn !== a.dateSat) ? 'later sitting' : ''}</span></div>
     <div class="paper-actions">
       <button class="btn btn-done" onclick="markDone()">✓ Mark done</button>
       <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
@@ -796,6 +844,9 @@ function renderPaper() {
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
     ensureMark(a, s.id).note = e.target.value; save(); renderRoster();
+  });
+  document.getElementById('satInput').addEventListener('change', e => {
+    ensureMark(a, s.id).satOn = e.target.value; save(); renderPaper();
   });
 }
 
@@ -955,6 +1006,39 @@ function copyAssessmentSummary() {
   clip(txt, 'Assessment summary copied');
 }
 
+// Anonymous, shareable overview across every job. Jobs are grouped by name so
+// the same assessment sat by several classes lines up for comparison. No
+// student names appear, so the text is safe to share or paste into an AI.
+function copyOverallSummary() {
+  if (!S.assessments.length) { toast('No marking jobs yet'); return; }
+  const list = S.assessments.map(assessmentStats);
+  let marked = 0, denom = 0, missing = 0;
+  list.forEach(x => { marked += x.marked; denom += x.denom; missing += x.missing; });
+  let txt = `Marking overview — ${todayStr()}\n`;
+  txt += `Overall: ${marked}/${denom} marked${missing ? `, ${missing} not submitted` : ''} across ${S.assessments.length} job${S.assessments.length === 1 ? '' : 's'}.\n`;
+  const groups = {};
+  list.forEach(x => {
+    const key = x.a.name.trim().toLowerCase();
+    (groups[key] = groups[key] || { name: x.a.name.trim(), items: [] }).items.push(x);
+  });
+  Object.values(groups).forEach(g => {
+    txt += `\n## ${g.name}\n`;
+    g.items.forEach(x => {
+      const a = x.a, cls = x.cls;
+      const dates = [];
+      if (a.dateSat) dates.push(`sat ${a.dateSat}`);
+      if (a.dueDate) dates.push(`due ${a.dueDate}`);
+      const late = cls ? cls.students.filter(s => { const m = markOf(a, s.id); return m.satOn && a.dateSat && m.satOn !== a.dateSat; }).length : 0;
+      txt += `- ${cls ? cls.name : '?'}${dates.length ? ` (${dates.join(', ')})` : ''}: ${x.marked}/${x.denom} marked${x.missing ? `, ${x.missing} missing` : ''}${late ? `, ${late} sat on another date` : ''}\n`;
+      const freq = {};
+      if (cls) cls.students.forEach(s => markOf(a, s.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
+      const rows = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(([tid, n]) => `${n} × ${tagName(tid)}`);
+      txt += rows.length ? `    tags: ${rows.join('; ')}\n` : `    tags: (none logged)\n`;
+    });
+  });
+  clip(txt, 'Overall summary copied');
+}
+
 function clip(text, msg) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => toast(msg), () => fallbackClip(text, msg));
@@ -971,8 +1055,6 @@ function fallbackClip(text, msg) {
 function openSettings() {
   document.getElementById('calibSelect').value = String(S.settings.calibrateEvery || 0);
   renderClassList();
-  renderAssessmentList();
-  populateAssessClassSelect();
   document.getElementById('settingsOverlay').classList.add('open');
 }
 function closeSettings() {
@@ -993,42 +1075,15 @@ function renderClassList() {
         S.classes = S.classes.filter(x => x.id !== c.id);
         S.assessments = S.assessments.filter(a => a.classId !== c.id);
         if (S.ui.currentClass === c.id) { S.ui.currentClass = null; S.ui.currentAssessment = null; S.ui.currentStudent = null; }
-        save(); renderClassList(); renderAssessmentList(); populateAssessClassSelect(); render();
+        save(); renderClassList(); populateJobClassSelect(); render();
       }
     };
     holder.appendChild(d);
   });
 }
-function renderAssessmentList() {
-  const holder = document.getElementById('assessmentList');
-  if (!S.assessments.length) {
-    holder.innerHTML = '<div style="color:var(--faint);font-size:12px;margin-bottom:8px;">No assessments yet.</div>';
-    return;
-  }
-  holder.innerHTML = '';
-  S.assessments.slice()
-    .sort((a, b) => a.classId.localeCompare(b.classId) || (a.createdAt || '').localeCompare(b.createdAt || ''))
-    .forEach(a => {
-      const cls = classOf(a);
-      const st = assessmentStats(a);
-      const due = a.dueDate ? `due ${a.dueDate}` : 'no due date';
-      const d = document.createElement('div');
-      d.className = 'cls-item';
-      d.innerHTML = `<span>${esc(cls ? cls.name : '?')} — ${esc(a.name)}</span>
-        <span style="color:var(--faint)">${st.marked}/${st.denom} · ${esc(due)}</span>
-        <button class="del" title="Delete assessment">×</button>`;
-      d.querySelector('.del').onclick = () => {
-        if (confirm(`Delete assessment "${a.name}" and its marking? This cannot be undone.`)) {
-          S.assessments = S.assessments.filter(x => x.id !== a.id);
-          if (S.ui.currentAssessment === a.id) { S.ui.currentAssessment = null; S.ui.currentStudent = null; }
-          save(); renderAssessmentList(); render();
-        }
-      };
-      holder.appendChild(d);
-    });
-}
-function populateAssessClassSelect() {
-  const sel = document.getElementById('newAssessClass');
+function populateJobClassSelect() {
+  const sel = document.getElementById('jobClass');
+  if (!sel) return;
   sel.innerHTML = S.classes.length
     ? S.classes.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
     : '<option value="">(add a class first)</option>';
@@ -1047,25 +1102,71 @@ function addClass() {
   S.classes.push({ id: uid(), name, students });
   document.getElementById('newClassName').value = '';
   document.getElementById('newRoster').value = '';
-  save(); renderClassList(); populateAssessClassSelect(); render();
+  save(); renderClassList(); populateJobClassSelect(); render();
   toast(`${name} added, ${students.length} students`);
 }
-function addAssessment() {
-  const classId = document.getElementById('newAssessClass').value;
-  const name = document.getElementById('newAssessName').value.trim();
-  const due = document.getElementById('newAssessDue').value;
-  if (!classId) { toast('Add a class first'); return; }
+
+// ---------------- Marking jobs (assessments) ----------------
+let editingJobId = null;
+function openJobModal(editId) {
+  editingJobId = editId || null;
+  populateJobClassSelect();
+  const sel = document.getElementById('jobClass');
+  const nameEl = document.getElementById('jobName');
+  const satEl = document.getElementById('jobSat');
+  const dueEl = document.getElementById('jobDue');
+  if (editingJobId) {
+    const a = S.assessments.find(x => x.id === editingJobId);
+    if (!a) { editingJobId = null; return; }
+    sel.value = a.classId; sel.disabled = true;           // class is fixed once a job exists
+    nameEl.value = a.name; satEl.value = a.dateSat || ''; dueEl.value = a.dueDate || '';
+    document.getElementById('jobModalTitle').textContent = 'Edit marking job';
+    document.getElementById('jobSaveBtn').textContent = 'Save changes';
+  } else {
+    if (!S.classes.length) { toast('Add a class in Set up first'); return; }
+    sel.disabled = false;
+    if (S.classes[0]) sel.value = S.classes[0].id;
+    nameEl.value = ''; satEl.value = ''; dueEl.value = '';
+    document.getElementById('jobModalTitle').textContent = 'New marking job';
+    document.getElementById('jobSaveBtn').textContent = 'Add job';
+  }
+  document.getElementById('jobOverlay').classList.add('open');
+  nameEl.focus();
+}
+function closeJobModal() {
+  document.getElementById('jobOverlay').classList.remove('open');
+  editingJobId = null;
+}
+function saveJob() {
+  const name = document.getElementById('jobName').value.trim();
+  const sat = document.getElementById('jobSat').value;
+  const due = document.getElementById('jobDue').value;
   if (!name) { toast('Assessment needs a name'); return; }
-  const cls = S.classes.find(c => c.id === classId);
-  if (!cls) { toast('Class not found'); return; }
-  const marks = {};
-  cls.students.forEach(s => { marks[s.id] = DEFAULT_MARK(); });
-  const a = { id: uid(), classId, name, dueDate: due || '', createdAt: new Date().toISOString(), marks };
-  S.assessments.push(a);
-  document.getElementById('newAssessName').value = '';
-  document.getElementById('newAssessDue').value = '';
-  save(); renderAssessmentList(); render();
-  toast(`${name} added to ${cls.name}`);
+  if (editingJobId) {
+    const a = S.assessments.find(x => x.id === editingJobId);
+    if (!a) { closeJobModal(); return; }
+    a.name = name; a.dateSat = sat || ''; a.dueDate = due || '';
+    save(); closeJobModal(); render();
+    toast('Job updated');
+  } else {
+    const classId = document.getElementById('jobClass').value;
+    const cls = S.classes.find(c => c.id === classId);
+    if (!cls) { toast('Pick a class'); return; }
+    const marks = {};
+    cls.students.forEach(s => { marks[s.id] = DEFAULT_MARK(); });
+    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: new Date().toISOString(), marks };
+    S.assessments.push(a);
+    save(); closeJobModal(); render();
+    toast(`${name} added to ${cls.name}`);
+  }
+}
+function deleteAssessment(aid) {
+  const a = S.assessments.find(x => x.id === aid);
+  if (!a) return;
+  if (!confirm(`Delete "${a.name}" and its marking? This cannot be undone.`)) return;
+  S.assessments = S.assessments.filter(x => x.id !== aid);
+  if (S.ui.currentAssessment === aid) { S.ui.currentAssessment = null; S.ui.currentStudent = null; }
+  save(); render();
 }
 
 function exportBackup() {
@@ -1085,7 +1186,7 @@ function importBackup(file) {
       else if (data.classes) { S = migrateV1(data); }        // old v1 backup
       else throw new Error('bad shape');
       S.ui.view = 'dashboard';
-      save(); render(); renderClassList(); renderAssessmentList(); populateAssessClassSelect();
+      save(); render(); renderClassList(); populateJobClassSelect();
       toast('Backup imported');
     } catch (e) { toast('Import failed: not a valid backup'); }
   };
@@ -1116,7 +1217,9 @@ document.getElementById('closeSettingsBtn').onclick = () => {
   save(); closeSettings();
 };
 document.getElementById('addClassBtn').onclick = addClass;
-document.getElementById('addAssessBtn').onclick = addAssessment;
+document.getElementById('jobSaveBtn').onclick = saveJob;
+document.getElementById('jobCancelBtn').onclick = closeJobModal;
+document.getElementById('jobOverlay').addEventListener('click', e => { if (e.target.id === 'jobOverlay') closeJobModal(); });
 document.getElementById('tagAddBtn').onclick = addTag;
 document.getElementById('tagInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTag(); });
 document.getElementById('classSummaryBtn').onclick = copyAssessmentSummary;
@@ -1128,7 +1231,7 @@ document.getElementById('importFile').addEventListener('change', e => {
 });
 document.getElementById('resetBtn').onclick = () => {
   if (confirm('Delete ALL classes, assessments, tags, and progress? This cannot be undone.')) {
-    S = blank(); save(); renderClassList(); renderAssessmentList(); populateAssessClassSelect(); render();
+    S = blank(); save(); renderClassList(); populateJobClassSelect(); render();
   }
 };
 document.getElementById('settingsOverlay').addEventListener('click', e => {

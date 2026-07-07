@@ -53,6 +53,11 @@ Everything is in `marking-console.html`: CSS in `<style>`, app in one
 - **Views**: `ui.view` toggles between the `dashboard` (landing) and the
   `workspace` (marking). Forced to `dashboard` on every launch. Body classes
   `view-dashboard` / `view-workspace` drive which `<main>` shows.
+- **Two modals**: the Set up modal (`#settingsOverlay`) is class setup only,
+  plus the rare calibration and backup/reset config; it never touches jobs.
+  Marking jobs are created and edited from the dashboard via the job modal
+  (`#jobOverlay`, `openJobModal(editId?)` / `saveJob()`), and deleted from a
+  card control (`deleteAssessment`). On edit the class is fixed.
 - **Rendering**: full re-render per region (`renderHeader`, `renderDashboard`,
   `renderChips`, `renderRoster`, `renderPaper`, `renderTags`), all called by
   `render()`. No virtual DOM, no diffing; the data is small enough that this
@@ -74,6 +79,7 @@ S = {
   }],
   assessments: [{
     id, classId, name,
+    dateSat,                 // '' or 'YYYY-MM-DD'; a future date marks the job "upcoming"
     dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
     createdAt,               // ISO string
     marks: {                 // keyed by student id
@@ -81,7 +87,8 @@ S = {
         status,              // 'unmarked' | 'marked' | 'missing'
         tags: [tagId, ...],  // mistakes observed on this paper
         note,                // free text, included in feedback prompt
-        markedAt             // ISO string or null; drives "marked today"
+        markedAt,            // ISO string or null; drives "marked today"
+        satOn                // '' or 'YYYY-MM-DD'; per-student sit override (default = dateSat)
       }
     }
   }],
@@ -105,7 +112,10 @@ S = {
    dueDaysLeft)`, computed in `assessmentStats`. Papers marked today count
    toward today, so the target stays stable through the day instead of
    shrinking as you work. Each job has its own due date; the dashboard sorts
-   jobs by urgency and shows a per-job pace.
+   jobs into three groups (markable now, then upcoming, then complete). A job
+   whose `dateSat` is in the future is "upcoming" (nothing to mark yet) and
+   sinks below active jobs. A student can sit late: `satOn` on their mark
+   overrides the job's `dateSat`, edited from the paper (student) view.
 4. **Mark done flow**: tick animation (respects `prefers-reduced-motion`),
    green row flash, auto-advance to next unmarked paper after 350 ms. The
    satisfying tick is a feature requirement, not decoration.
@@ -120,6 +130,10 @@ S = {
    pastes this into Claude to generate the comment.
 7. **Assessment tag summary** (`copyAssessmentSummary`): frequency table for
    the current assessment, used for planning reteaching of that topic.
+   **Overall summary** (`copyOverallSummary`, dashboard): anonymous text
+   across all jobs, grouped by assessment name so the same test sat by several
+   classes lines up for comparison; no student names, safe to share or feed to
+   an AI. Includes a per-class "N sat on another date" count from `satOn`.
 8. **Calibration check**: optional, off by default. Every N marked papers in
    an assessment, a banner suggests re-reading the first marked paper for
    drift.
