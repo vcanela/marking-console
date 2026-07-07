@@ -194,7 +194,7 @@
   .calib-banner button { background: none; border: none; color: var(--faint); font-size: 15px; }
   .empty-state { padding: 40px 22px; color: var(--faint); text-align: center; font-size: 13px; }
   .empty-state .btn { margin-top: 14px; }
-  .class-summary-row { padding: 12px 22px; border-top: 1px solid var(--border); margin-top: auto; }
+  .class-summary-row { padding: 12px 22px; border-top: 1px solid var(--border); margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 
   /* ---------- Tag column ---------- */
   .tag-col { display: flex; flex-direction: column; }
@@ -376,7 +376,8 @@
     <div id="calibHolder"></div>
     <div id="paperPanel"></div>
     <div class="class-summary-row">
-      <button class="btn btn-copy" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy assessment tag summary</button>
+      <button class="btn btn-copy" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy tag summary</button>
+      <button class="btn btn-copy" id="assessDataBtn" style="font-size:12px; padding:7px 12px;">Copy assessment data</button>
     </div>
   </section>
 
@@ -682,8 +683,7 @@ function renderDashboard() {
 
   el.innerHTML = `
     <section class="dash-section">
-      <div class="dash-jobs-head"><span class="dash-h" style="margin-bottom:0;">Overall progress</span>
-        <button class="btn-newjob" onclick="copyOverallSummary()">Copy overall summary</button></div>
+      <div class="dash-h">Overall progress</div>
       <div class="dash-hero-top">
         <span class="dash-bignum">${pct}%</span>
         <span class="dash-bigsub">${marked} of ${denom} papers marked${missing ? ` · ${missing} not submitted` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
@@ -1006,37 +1006,36 @@ function copyAssessmentSummary() {
   clip(txt, 'Assessment summary copied');
 }
 
-// Anonymous, shareable overview across every job. Jobs are grouped by name so
-// the same assessment sat by several classes lines up for comparison. No
-// student names appear, so the text is safe to share or paste into an AI.
-function copyOverallSummary() {
-  if (!S.assessments.length) { toast('No marking jobs yet'); return; }
-  const list = S.assessments.map(assessmentStats);
-  let marked = 0, denom = 0, missing = 0;
-  list.forEach(x => { marked += x.marked; denom += x.denom; missing += x.missing; });
-  let txt = `Marking overview — ${todayStr()}\n`;
-  txt += `Overall: ${marked}/${denom} marked${missing ? `, ${missing} not submitted` : ''} across ${S.assessments.length} job${S.assessments.length === 1 ? '' : 's'}.\n`;
-  const groups = {};
-  list.forEach(x => {
-    const key = x.a.name.trim().toLowerCase();
-    (groups[key] = groups[key] || { name: x.a.name.trim(), items: [] }).items.push(x);
+// Full anonymous dump of one assessment: every paper's status, tags and note,
+// then the tag totals. Papers are numbered rather than named, so the text
+// carries no student identities and is safe to share or feed to an AI for
+// "how did this assessment go" style analysis.
+function copyAssessmentData() {
+  const a = curAssessment(); const c = curClass();
+  if (!a || !c) { toast('Open a marking job first'); return; }
+  const st = assessmentStats(a);
+  const L = [];
+  L.push(`${c.name} — ${a.name}`);
+  const dates = [];
+  if (a.dateSat) dates.push(`sat ${a.dateSat}`);
+  if (a.dueDate) dates.push(`due ${a.dueDate}`);
+  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${c.students.length} marked, ${st.missing} missing.`);
+  L.push('');
+  L.push('Papers:');
+  c.students.forEach((s, i) => {
+    const m = markOf(a, s.id);
+    let line = `- Paper ${i + 1} [${m.status}]`;
+    if (m.satOn && a.dateSat && m.satOn !== a.dateSat) line += ` (sat ${m.satOn})`;
+    const tags = m.tags.map(tid => tagName(tid));
+    line += tags.length ? `: ${tags.join('; ')}` : ': (no tags)';
+    if (m.note && m.note.trim()) line += ` — note: ${m.note.trim()}`;
+    L.push(line);
   });
-  Object.values(groups).forEach(g => {
-    txt += `\n## ${g.name}\n`;
-    g.items.forEach(x => {
-      const a = x.a, cls = x.cls;
-      const dates = [];
-      if (a.dateSat) dates.push(`sat ${a.dateSat}`);
-      if (a.dueDate) dates.push(`due ${a.dueDate}`);
-      const late = cls ? cls.students.filter(s => { const m = markOf(a, s.id); return m.satOn && a.dateSat && m.satOn !== a.dateSat; }).length : 0;
-      txt += `- ${cls ? cls.name : '?'}${dates.length ? ` (${dates.join(', ')})` : ''}: ${x.marked}/${x.denom} marked${x.missing ? `, ${x.missing} missing` : ''}${late ? `, ${late} sat on another date` : ''}\n`;
-      const freq = {};
-      if (cls) cls.students.forEach(s => markOf(a, s.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
-      const rows = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(([tid, n]) => `${n} × ${tagName(tid)}`);
-      txt += rows.length ? `    tags: ${rows.join('; ')}\n` : `    tags: (none logged)\n`;
-    });
-  });
-  clip(txt, 'Overall summary copied');
+  const freq = {};
+  c.students.forEach(s => markOf(a, s.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
+  const rows = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(([tid, n]) => `  ${n} × ${tagName(tid)}`);
+  if (rows.length) { L.push(''); L.push('Tag totals:'); rows.forEach(r => L.push(r)); }
+  clip(L.join('\n'), 'Assessment data copied');
 }
 
 function clip(text, msg) {
@@ -1223,6 +1222,7 @@ document.getElementById('jobOverlay').addEventListener('click', e => { if (e.tar
 document.getElementById('tagAddBtn').onclick = addTag;
 document.getElementById('tagInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTag(); });
 document.getElementById('classSummaryBtn').onclick = copyAssessmentSummary;
+document.getElementById('assessDataBtn').onclick = copyAssessmentData;
 document.getElementById('exportBtn').onclick = exportBackup;
 document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').addEventListener('change', e => {

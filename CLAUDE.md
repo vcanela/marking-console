@@ -128,12 +128,11 @@ S = {
    note, and fixed constraints (address student directly, encouraging but
    honest, ~80 words, do not invent issues beyond those listed). The owner
    pastes this into Claude to generate the comment.
-7. **Assessment tag summary** (`copyAssessmentSummary`): frequency table for
-   the current assessment, used for planning reteaching of that topic.
-   **Overall summary** (`copyOverallSummary`, dashboard): anonymous text
-   across all jobs, grouped by assessment name so the same test sat by several
-   classes lines up for comparison; no student names, safe to share or feed to
-   an AI. Includes a per-class "N sat on another date" count from `satOn`.
+7. **Two assessment exports, both in the workspace** (`class-summary-row`):
+   **tag summary** (`copyAssessmentSummary`) is the frequency table for
+   reteaching; **assessment data** (`copyAssessmentData`) is a full anonymous
+   dump of that one assessment, every paper's status/tags/note (papers
+   numbered, no names) plus tag totals, for sharing or AI analysis.
 8. **Calibration check**: optional, off by default. Every N marked papers in
    an assessment, a banner suggests re-reading the first marked paper for
    drift.
