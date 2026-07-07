@@ -270,8 +270,8 @@
   body.view-workspace #dashboardView { display: none; }
 
   /* ---------- Dashboard ---------- */
-  #dashboardView { max-width: 1080px; margin: 0 auto; width: 100%; padding: 24px 28px 44px; }
-  .dash-empty { padding: 60px 20px; text-align: center; color: var(--faint); font-size: 14px; }
+  #dashboardView { max-width: 1080px; margin: 0 auto; width: 100%; padding: 24px 28px 44px; min-height: calc(100vh - 92px); }
+  .dash-empty { padding: 60px 20px; text-align: center; color: var(--faint); font-size: 14px; line-height: 1.7; }
   .dash-empty .btn { margin-top: 16px; }
   .dash-section {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -293,26 +293,14 @@
   .tile.good .tile-value { color: var(--green); }
   .tile.warn .tile-value { color: var(--red); }
 
-  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
-  .runway-empty { color: var(--faint); font-size: 13px; line-height: 1.6; }
   .linklike { background: none; border: none; color: var(--cyan); font: inherit; padding: 0; text-decoration: underline; }
-  .runway-row {
-    display: flex; align-items: center; gap: 12px; padding: 9px 0;
-    border-bottom: 1px solid rgba(41, 50, 63, 0.5);
-  }
-  .runway-row:last-child { border-bottom: none; }
-  .runway-day { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 118px; }
-  .runway-row.today .runway-day { color: var(--amber); }
-  .runway-bar { flex: 1; height: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
-  .runway-bar span { display: block; height: 100%; background: var(--amber-dim); }
-  .runway-row.today .runway-bar span { background: linear-gradient(90deg, var(--amber-dim), var(--amber)); }
-  .runway-num { font-family: var(--mono); font-size: 13px; color: var(--text); white-space: nowrap; text-align: right; }
-  .runway-num .runway-sub { color: var(--faint); font-size: 11px; }
 
   .class-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; margin-bottom: 10px; }
   .class-card:last-child { margin-bottom: 0; }
   .class-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .class-card-name { font-size: 14px; font-weight: 600; }
+  .job-class { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 8px; }
+  .job-due { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 4px; }
   .class-card-frac { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
   .class-card .progress-track { margin: 10px 0 9px; }
   .class-card-foot { display: flex; align-items: center; gap: 12px; }
@@ -330,9 +318,6 @@
     #workspaceView { grid-template-columns: 1fr; }
     .col { border-right: none; border-bottom: 1px solid var(--border); }
     #roster, #tagList { max-height: 300px; }
-  }
-  @media (max-width: 760px) {
-    .dash-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -373,7 +358,7 @@
     <div id="calibHolder"></div>
     <div id="paperPanel"></div>
     <div class="class-summary-row">
-      <button class="btn btn-copy" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy class tag summary</button>
+      <button class="btn btn-copy" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy assessment tag summary</button>
     </div>
   </section>
 
@@ -393,17 +378,23 @@
   <div class="modal">
     <h2>Set up</h2>
 
-    <h3>Deadline</h3>
-    <label for="endDate">Last day of marking (used to compute daily target)</label>
-    <input type="date" id="endDate">
-
     <h3>Classes</h3>
     <div id="classList"></div>
     <label for="newClassName">Class name</label>
     <input type="text" id="newClassName" placeholder="e.g. 11PSC Physical Sciences">
-    <label for="newRoster">Roster, one student per line, first name then last name</label>
+    <label for="newRoster">Roster, one student per line, first name then last name (order preserved)</label>
     <textarea id="newRoster" placeholder="Sophia King&#10;Liam Patel&#10;Aroha Ngata"></textarea>
     <button class="btn" id="addClassBtn">Add class</button>
+
+    <h3>Assessments</h3>
+    <div id="assessmentList"></div>
+    <label for="newAssessClass">Class</label>
+    <select id="newAssessClass"></select>
+    <label for="newAssessName">Assessment name</label>
+    <input type="text" id="newAssessName" placeholder="e.g. Term 2 Test, Practical Report">
+    <label for="newAssessDue">Due date (optional; drives the daily target)</label>
+    <input type="date" id="newAssessDue">
+    <button class="btn" id="addAssessBtn">Add assessment</button>
 
     <h3>Calibration check</h3>
     <label for="calibSelect">Remind me to re-read my first marked paper every…</label>
@@ -434,77 +425,140 @@
 'use strict';
 
 // ---------------- State ----------------
-const KEY = 'markingConsole.v1';
+// v2 model: classes are persistent rosters; assessments are the markable jobs
+// attached to a class, each holding its own per-student marks.
+const KEY = 'markingConsole.v2';
+const OLD_KEY = 'markingConsole.v1';
+
+const DEFAULT_MARK = () => ({ status: 'unmarked', tags: [], note: '', markedAt: null });
+
 const blank = () => ({
-  classes: [],          // {id, name, students:[{id, first, last, label, status:'unmarked'|'marked'|'missing', tags:[], note:'', markedAt:null}]}
+  classes: [],          // {id, name, students:[{id, first, last, label}]}
+  assessments: [],      // {id, classId, name, dueDate, createdAt, marks:{studentId:{status,tags,note,markedAt}}}
   tags: [],             // {id, name}
-  ui: { currentClass: null, currentStudent: null, view: 'dashboard', theme: 'dark' },
-  settings: { endDate: '', calibrateEvery: 0 }
+  ui: { currentClass: null, currentAssessment: null, currentStudent: null, view: 'dashboard', theme: 'dark' },
+  settings: { calibrateEvery: 0 }
 });
+
 let S = load();
 
 function load() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
+    const v2 = localStorage.getItem(KEY);
+    if (v2) return normalize(JSON.parse(v2));
+    const v1 = localStorage.getItem(OLD_KEY);
+    if (v1) return migrateV1(JSON.parse(v1));
   } catch (e) { console.warn('Load failed', e); }
   return blank();
 }
+
+// Fill in any missing keys so older or partial saved states never crash a render.
+function normalize(d) {
+  const b = blank();
+  d = d || {};
+  d.classes = Array.isArray(d.classes) ? d.classes : [];
+  d.assessments = Array.isArray(d.assessments) ? d.assessments : [];
+  d.tags = Array.isArray(d.tags) ? d.tags : [];
+  d.assessments.forEach(a => { if (!a.marks || typeof a.marks !== 'object') a.marks = {}; });
+  d.ui = Object.assign({}, b.ui, d.ui || {});
+  d.settings = Object.assign({}, b.settings, d.settings || {});
+  return d;
+}
+
+// One-time conversion from the old shape where each class carried its marks
+// directly. Each old class becomes a roster plus one assessment holding those
+// marks, seeded with the old global deadline. The v1 record is left in place
+// as a fallback and is not deleted.
+function migrateV1(d) {
+  const out = blank();
+  out.tags = Array.isArray(d.tags) ? d.tags : [];
+  out.settings.calibrateEvery = (d.settings && d.settings.calibrateEvery) || 0;
+  out.ui.theme = (d.ui && d.ui.theme) || 'dark';
+  const due = (d.settings && d.settings.endDate) || '';
+  (d.classes || []).forEach(oldC => {
+    const students = (oldC.students || []).map(s => ({ id: s.id, first: s.first, last: s.last, label: s.label }));
+    out.classes.push({ id: oldC.id, name: oldC.name, students });
+    const marks = {};
+    (oldC.students || []).forEach(s => {
+      marks[s.id] = { status: s.status || 'unmarked', tags: (s.tags || []).slice(), note: s.note || '', markedAt: s.markedAt || null };
+    });
+    out.assessments.push({ id: uid(), classId: oldC.id, name: 'Assessment 1', dueDate: due, createdAt: new Date().toISOString(), marks });
+  });
+  return out;
+}
+
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Warning: could not save'); }
 }
-const uid = () => Math.random().toString(36).slice(2, 9);
+// Function declaration (hoisted) so load()/migrateV1() can call it before this
+// point in source order.
+function uid() { return Math.random().toString(36).slice(2, 9); }
 
 // ---------------- Derived helpers ----------------
-const curClass = () => S.classes.find(c => c.id === S.ui.currentClass) || null;
+const curAssessment = () => S.assessments.find(a => a.id === S.ui.currentAssessment) || null;
+const classOf = a => (a ? S.classes.find(c => c.id === a.classId) || null : null);
+const curClass = () => classOf(curAssessment()) || S.classes.find(c => c.id === S.ui.currentClass) || null;
 const curStudent = () => {
   const c = curClass();
   return c ? c.students.find(s => s.id === S.ui.currentStudent) || null : null;
 };
-const allStudents = () => S.classes.flatMap(c => c.students);
-const tagCount = tagId => allStudents().reduce((n, s) => n + (s.tags.includes(tagId) ? 1 : 0), 0);
+
+// Read a student's mark for an assessment; returns a fresh default (not
+// persisted) when none exists yet, so reads are always safe.
+function markOf(a, sid) { return (a && a.marks[sid]) || DEFAULT_MARK(); }
+// Get the mark for writing, creating it on first touch.
+function ensureMark(a, sid) { if (!a.marks[sid]) a.marks[sid] = DEFAULT_MARK(); return a.marks[sid]; }
+
 const tagName = tagId => (S.tags.find(t => t.id === tagId) || {}).name || '?';
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
-function daysLeft() {
-  if (!S.settings.endDate) return null;
-  const end = new Date(S.settings.endDate + 'T23:59:59');
-  const diff = Math.ceil((end - new Date()) / 86400000);
-  return Math.max(diff, 0);
+function dueDaysLeft(a) {
+  if (!a || !a.dueDate) return null;
+  const end = new Date(a.dueDate + 'T23:59:59');
+  return Math.max(0, Math.ceil((end - new Date()) / 86400000));
 }
-
-// Single source of truth for the cross-class figures shown in both the
-// header and the dashboard, so the two can never drift apart.
-function stats() {
-  const all = allStudents();
-  const total = all.length;
-  const marked = all.filter(s => s.status === 'marked').length;
-  const missing = all.filter(s => s.status === 'missing').length;
-  const remaining = total - marked - missing;
-  const markedToday = all.filter(s => s.status === 'marked' && s.markedAt && s.markedAt.slice(0, 10) === todayStr()).length;
-  const dl = daysLeft();
-  // Daily target: today's marked papers count toward today, so the target is
-  // computed as if today started fresh, then stays stable through the day.
-  const dailyTarget = (dl && dl > 0) ? Math.ceil((remaining + markedToday) / dl) : null;
-  const denom = total - missing;
-  const pct = denom ? Math.round(100 * marked / denom) : 0;
-  return { total, marked, missing, remaining, markedToday, dl, dailyTarget, denom, pct };
-}
-
-// Date helpers for the runway. Kept local and dependency free.
-function addDays(base, n) { const d = new Date(base); d.setDate(d.getDate() + n); return d; }
-function fmtDay(d, i) {
-  if (i === 0) return 'Today';
-  if (i === 1) return 'Tomorrow';
+function fmtDate(str) {
+  if (!str) return '';
+  const d = new Date(str + 'T12:00:00');
   return d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+// Per-assessment figures: the single source of truth for one job's numbers,
+// used by the header, dashboard and settings alike.
+function assessmentStats(a) {
+  const cls = classOf(a);
+  const students = cls ? cls.students : [];
+  const total = students.length;
+  let marked = 0, missing = 0, markedToday = 0;
+  students.forEach(s => {
+    const m = markOf(a, s.id);
+    if (m.status === 'marked') { marked++; if (m.markedAt && m.markedAt.slice(0, 10) === todayStr()) markedToday++; }
+    else if (m.status === 'missing') missing++;
+  });
+  const denom = total - missing;
+  const remaining = denom - marked;
+  const pct = denom ? Math.round(100 * marked / denom) : 0;
+  const dl = dueDaysLeft(a);
+  // Daily target: today's marked papers count toward today, so the number stays
+  // stable through the day instead of shrinking as you work.
+  const dailyTarget = (dl && dl > 0) ? Math.ceil((remaining + markedToday) / dl) : null;
+  const complete = total > 0 && remaining === 0;
+  return { a, cls, total, marked, missing, markedToday, denom, remaining, pct, dl, dailyTarget, complete };
+}
+
+// Count how many papers in one assessment carry a given tag.
+function tagCountInAssessment(a, tagId) {
+  const cls = classOf(a);
+  if (!cls) return 0;
+  return cls.students.reduce((n, s) => n + (markOf(a, s.id).tags.includes(tagId) ? 1 : 0), 0);
+}
+
 // ---------------- Label generation ----------------
-// Alphabetical by surname; labels are "First X", extending the surname
-// prefix until unique within the class.
+// Entry order is preserved; labels are "First X", extending the surname prefix
+// until unique within the class. No sorting, so the roster keeps the order you
+// typed or pasted.
 function buildLabels(students) {
-  students.sort((a, b) => a.last.localeCompare(b.last) || a.first.localeCompare(b.first));
   students.forEach(s => { s._len = 1; });
   let changed = true;
   while (changed) {
@@ -516,9 +570,7 @@ function buildLabels(students) {
     });
     Object.values(seen).forEach(group => {
       if (group.length > 1) {
-        group.forEach(s => {
-          if (s._len < s.last.length) { s._len++; changed = true; }
-        });
+        group.forEach(s => { if (s._len < s.last.length) { s._len++; changed = true; } });
       }
     });
   }
@@ -548,49 +600,72 @@ function toggleTheme() {
 }
 
 function renderHeader() {
-  const st = stats();
-  document.getElementById('statDays').textContent = st.dl === null ? '–' : st.dl;
-  document.getElementById('statTarget').textContent = st.dailyTarget === null ? '–' : st.dailyTarget;
-  document.getElementById('statToday').textContent = st.markedToday;
-  document.getElementById('statMissing').textContent = st.missing;
-  document.getElementById('progressFill').style.width = st.pct + '%';
-  document.getElementById('progressLabel').textContent = `${st.marked} / ${st.denom} marked (${st.pct}%)`;
+  const a = curAssessment();
+  const st = a ? assessmentStats(a) : null;
+  document.getElementById('statDays').textContent = (st && st.dl !== null) ? st.dl : '–';
+  document.getElementById('statTarget').textContent = (st && st.dailyTarget !== null) ? st.dailyTarget : '–';
+  document.getElementById('statToday').textContent = st ? st.markedToday : 0;
+  document.getElementById('statMissing').textContent = st ? st.missing : 0;
+  document.getElementById('progressFill').style.width = (st ? st.pct : 0) + '%';
+  document.getElementById('progressLabel').textContent = st ? `${st.marked} / ${st.denom} marked (${st.pct}%)` : '0 / 0 marked';
 }
 
 // ---------------- Dashboard (landing view) ----------------
 function renderDashboard() {
   const el = document.getElementById('dashboardView');
   if (!S.classes.length) {
-    el.innerHTML = `<div class="dash-empty">No classes set up yet.<br>
+    el.innerHTML = `<div class="dash-empty">No classes yet. Start by adding your classes.<br>
       <button class="btn" onclick="openSettings()">Open Set up</button></div>`;
     return;
   }
-  const st = stats();
-  const onTrack = st.dailyTarget !== null && st.markedToday >= st.dailyTarget;
+  if (!S.assessments.length) {
+    el.innerHTML = `<div class="dash-empty">${S.classes.length} class${S.classes.length === 1 ? '' : 'es'} ready.
+      Add an assessment to start marking.<br>
+      <button class="btn" onclick="openSettings()">Add an assessment</button></div>`;
+    return;
+  }
 
-  let html = `
+  const list = S.assessments.map(assessmentStats);
+  let marked = 0, denom = 0, remaining = 0, missing = 0, markedToday = 0, targetToday = 0;
+  list.forEach(x => {
+    marked += x.marked; denom += x.denom; remaining += x.remaining; missing += x.missing; markedToday += x.markedToday;
+    if (x.dailyTarget) targetToday += x.dailyTarget;
+  });
+  const pct = denom ? Math.round(100 * marked / denom) : 0;
+  const active = list.filter(x => !x.complete);
+  const dued = active.map(x => x.a.dueDate).filter(Boolean).sort();
+  const nextDue = dued.length ? dued[0] : '';
+  const onTrack = targetToday > 0 && markedToday >= targetToday;
+
+  // Jobs sorted: unfinished first, then by due date (undated last), then oldest.
+  const order = list.slice().sort((x, y) => {
+    if (x.complete !== y.complete) return x.complete ? 1 : -1;
+    const dx = x.a.dueDate || '9999-99-99', dy = y.a.dueDate || '9999-99-99';
+    return dx.localeCompare(dy) || (x.a.createdAt || '').localeCompare(y.a.createdAt || '');
+  });
+
+  el.innerHTML = `
     <section class="dash-section">
       <div class="dash-h">Overall progress</div>
       <div class="dash-hero-top">
-        <span class="dash-bignum">${st.pct}%</span>
-        <span class="dash-bigsub">${st.marked} of ${st.denom} papers marked${st.missing ? ` · ${st.missing} not submitted` : ''}</span>
+        <span class="dash-bignum">${pct}%</span>
+        <span class="dash-bigsub">${marked} of ${denom} papers marked${missing ? ` · ${missing} not submitted` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
       </div>
-      <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill" style="width:${st.pct}%"></div></div>
+      <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill" style="width:${pct}%"></div></div>
     </section>
 
     <section class="dash-tiles">
-      ${tile('Days left', st.dl === null ? '–' : st.dl)}
-      ${tile("Today's target", st.dailyTarget === null ? '–' : st.dailyTarget)}
-      ${tile('Marked today', st.markedToday, onTrack ? 'good' : '')}
-      ${tile('Remaining', st.remaining, st.remaining === 0 ? 'good' : '')}
-      ${tile('Missing', st.missing, st.missing ? 'warn' : '')}
+      ${tile('Active jobs', active.length)}
+      ${tile('Remaining', remaining, remaining === 0 ? 'good' : '')}
+      ${tile('Marked today', markedToday, onTrack ? 'good' : '')}
+      ${tile("Today's target", targetToday || '–')}
+      ${tile('Missing', missing, missing ? 'warn' : '')}
     </section>
 
-    <div class="dash-grid">
-      <section class="dash-section"><div class="dash-h">Runway</div>${runwayHtml(st)}</section>
-      <section class="dash-section"><div class="dash-h">Classes</div>${classesHtml()}</section>
-    </div>`;
-  el.innerHTML = html;
+    <section class="dash-section">
+      <div class="dash-h">Marking jobs</div>
+      ${order.map(jobCard).join('')}
+    </section>`;
 }
 
 function tile(label, value, cls) {
@@ -598,92 +673,37 @@ function tile(label, value, cls) {
     <div class="tile-value">${esc(String(value))}</div></div>`;
 }
 
-// The runway is deliberately one self-contained function: today's target uses
-// the stable header formula, the remainder is spread evenly (front loaded)
-// across the days left. A future "which days do I mark" rule, or a calendar
-// feed, replaces only the distribution block below.
-function runwayHtml(st) {
-  if (!S.settings.endDate) {
-    return `<div class="runway-empty">Set a deadline in
-      <button class="linklike" onclick="openSettings()">Set up</button> to see a day by day plan.<br>
-      ${st.remaining} paper${st.remaining === 1 ? '' : 's'} remaining.</div>`;
-  }
-  if (st.dl === 0) {
-    return `<div class="runway-empty">Deadline reached.
-      ${st.remaining ? st.remaining + ' paper' + (st.remaining === 1 ? '' : 's') + ' still to mark.' : 'All caught up. 🎉'}</div>`;
-  }
-  if (st.remaining === 0) {
-    return `<div class="runway-empty">All papers marked. Nothing left on the runway. 🎉</div>`;
-  }
-
-  // Runway rows are papers still to mark, so today is what's left to reach the
-  // target (0 once you've hit it), and every row sums to the papers remaining.
-  const todayLeft = Math.max(0, st.dailyTarget - st.markedToday);
-  const afterToday = Math.max(0, st.remaining - todayLeft);
-  const futureDays = st.dl - 1;
-
-  const plan = [{ i: 0, count: todayLeft, done: st.markedToday }];
-  if (futureDays > 0) {
-    const base = Math.floor(afterToday / futureDays);
-    const extra = afterToday % futureDays;              // front load the extra papers
-    for (let k = 1; k <= futureDays; k++) plan.push({ i: k, count: base + (k <= extra ? 1 : 0) });
-  }
-
-  const max = Math.max(1, ...plan.map(p => p.count));
-  const today = new Date();
-  const CAP = 12;
-  let rows = plan.slice(0, CAP).map(p => {
-    const w = Math.round(100 * p.count / max);
-    let num;
-    if (p.i === 0) {
-      num = (p.count === 0)
-        ? `<span style="color:var(--green)">target met</span> <span class="runway-sub">· ${p.done} done</span>`
-        : `${p.count} paper${p.count === 1 ? '' : 's'} <span class="runway-sub">· ${p.done} done</span>`;
-    } else {
-      num = `${p.count} paper${p.count === 1 ? '' : 's'}`;
-    }
-    return `<div class="runway-row${p.i === 0 ? ' today' : ''}">
-      <span class="runway-day">${esc(fmtDay(addDays(today, p.i), p.i))}</span>
-      <span class="runway-bar"><span style="width:${w}%"></span></span>
-      <span class="runway-num">${num}</span>
-    </div>`;
-  }).join('');
-  if (plan.length > CAP) {
-    rows += `<div class="runway-row"><span class="runway-day" style="color:var(--faint)">+ ${plan.length - CAP} more days</span></div>`;
-  }
-  return rows;
+function jobCard(x) {
+  const a = x.a, cls = x.cls;
+  const dueTxt = a.dueDate
+    ? `${esc(fmtDate(a.dueDate))}${x.dl !== null ? ` · ${x.dl} day${x.dl === 1 ? '' : 's'} left` : ''}`
+    : 'no due date';
+  let pace;
+  if (x.complete) pace = `<span class="cc-chip cc-done">Complete ✓</span>`;
+  else if (x.dl === 0) pace = `<span class="cc-chip miss">due now · ${x.remaining} left</span>`;
+  else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
+  else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
+  const missChip = x.missing ? `<span class="cc-chip miss">${x.missing} missing</span>` : '';
+  const btn = `<button class="btn-resume" onclick="openAssessment('${a.id}')">${x.complete ? 'Review' : 'Resume ›'}</button>`;
+  return `<div class="class-card">
+    <div class="class-card-top">
+      <span class="class-card-name">${esc(a.name)}<span class="job-class">${esc(cls ? cls.name : '')}</span></span>
+      <span class="class-card-frac">${x.marked}/${x.denom}${x.denom ? ` · ${x.pct}%` : ''}</span>
+    </div>
+    <div class="job-due">${dueTxt}</div>
+    <div class="progress-track"><div class="progress-fill" style="width:${x.pct}%"></div></div>
+    <div class="class-card-foot">${pace}${missChip}${btn}</div>
+  </div>`;
 }
 
-function classesHtml() {
-  return S.classes.map(c => {
-    const done = c.students.filter(s => s.status === 'marked').length;
-    const missing = c.students.filter(s => s.status === 'missing').length;
-    const denom = c.students.length - missing;
-    const remaining = denom - done;
-    const pct = denom ? Math.round(100 * done / denom) : 0;
-    const complete = denom > 0 && remaining === 0;
-    const missChip = missing ? `<span class="cc-chip miss">${missing} missing</span>` : '';
-    const foot = complete
-      ? `<span class="cc-chip cc-done">Complete ✓</span>${missChip}<button class="btn-resume" onclick="resumeClass('${c.id}')">Review</button>`
-      : `<span class="cc-chip">${remaining} to mark</span>${missChip}<button class="btn-resume" onclick="resumeClass('${c.id}')">Resume ›</button>`;
-    return `<div class="class-card">
-      <div class="class-card-top">
-        <span class="class-card-name">${esc(c.name)}</span>
-        <span class="class-card-frac">${done}/${denom}${denom ? ` · ${pct}%` : ''}</span>
-      </div>
-      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <div class="class-card-foot">${foot}</div>
-    </div>`;
-  }).join('');
-}
-
-function resumeClass(cid) {
-  S.ui.currentClass = cid;
-  const c = curClass();
-  if (c) {
-    const first = c.students.find(s => s.status === 'unmarked');
-    S.ui.currentStudent = first ? first.id : (c.students[0] ? c.students[0].id : null);
-  }
+function openAssessment(aid) {
+  const a = S.assessments.find(x => x.id === aid);
+  if (!a) return;
+  S.ui.currentAssessment = aid;
+  S.ui.currentClass = a.classId;
+  const cls = classOf(a);
+  const first = cls ? cls.students.find(s => markOf(a, s.id).status === 'unmarked') : null;
+  S.ui.currentStudent = first ? first.id : (cls && cls.students[0] ? cls.students[0].id : null);
   S.ui.view = 'workspace';
   save(); render();
 }
@@ -693,20 +713,21 @@ function goDashboard() {
   save(); render();
 }
 
+// Sibling assessments of the current class, so you can flip between, say, a
+// test and a practical for the same class without going back to the dashboard.
 function renderChips() {
   const holder = document.getElementById('classChips');
   holder.innerHTML = '';
-  if (!S.classes.length) {
-    holder.innerHTML = '<span style="color:var(--faint);font-size:12px;">No classes yet. Open Set up.</span>';
-    return;
-  }
-  S.classes.forEach(c => {
-    const done = c.students.filter(s => s.status === 'marked').length;
-    const denom = c.students.filter(s => s.status !== 'missing').length;
+  const c = curClass();
+  if (!c) { holder.innerHTML = '<span style="color:var(--faint);font-size:12px;">No assessment selected.</span>'; return; }
+  const sibs = S.assessments.filter(a => a.classId === c.id);
+  if (!sibs.length) { holder.innerHTML = '<span style="color:var(--faint);font-size:12px;">No assessments for this class.</span>'; return; }
+  sibs.forEach(a => {
+    const st = assessmentStats(a);
     const b = document.createElement('button');
-    b.className = 'class-chip' + (c.id === S.ui.currentClass ? ' active' : '');
-    b.innerHTML = `${esc(c.name)}<span class="mini">${done}/${denom}</span>`;
-    b.onclick = () => { S.ui.currentClass = c.id; S.ui.currentStudent = null; save(); render(); };
+    b.className = 'class-chip' + (a.id === S.ui.currentAssessment ? ' active' : '');
+    b.innerHTML = `${esc(a.name)}<span class="mini">${st.marked}/${st.denom}</span>`;
+    b.onclick = () => openAssessment(a.id);
     holder.appendChild(b);
   });
 }
@@ -715,17 +736,19 @@ function renderRoster() {
   const holder = document.getElementById('roster');
   const cp = document.getElementById('classProgress');
   holder.innerHTML = '';
+  const a = curAssessment();
   const c = curClass();
-  if (!c) { cp.textContent = ''; return; }
-  const done = c.students.filter(s => s.status === 'marked').length;
-  cp.textContent = `${done}/${c.students.length}`;
+  if (!a || !c) { cp.textContent = ''; return; }
+  const st = assessmentStats(a);
+  cp.textContent = `${st.marked}/${c.students.length}`;
   c.students.forEach(s => {
+    const m = markOf(a, s.id);
     const row = document.createElement('div');
-    row.className = 'stu-row ' + s.status + (s.id === S.ui.currentStudent ? ' current' : '');
+    row.className = 'stu-row ' + m.status + (s.id === S.ui.currentStudent ? ' current' : '');
     row.innerHTML = `
       <span class="stu-status"><svg viewBox="0 0 12 12"><path d="M2 6.5 L5 9.5 L10 3"/></svg></span>
       <span class="stu-label">${esc(s.label)}</span>
-      <span class="stu-tagcount">${s.tags.length ? s.tags.length + ' tag' + (s.tags.length > 1 ? 's' : '') : ''}</span>`;
+      <span class="stu-tagcount">${m.tags.length ? m.tags.length + ' tag' + (m.tags.length > 1 ? 's' : '') : ''}</span>`;
     row.onclick = () => { S.ui.currentStudent = s.id; save(); render(); };
     holder.appendChild(row);
   });
@@ -733,15 +756,17 @@ function renderRoster() {
 
 function renderPaper() {
   const holder = document.getElementById('paperPanel');
-  const s = curStudent();
+  const a = curAssessment();
   const c = curClass();
+  const s = curStudent();
   if (!S.classes.length) {
     holder.innerHTML = `<div class="empty-state">No classes set up yet.<br>
       <button class="btn" onclick="openSettings()">Open Set up</button></div>`;
     return;
   }
-  if (!c) {
-    holder.innerHTML = `<div class="empty-state">Choose a class on the left to begin.</div>`;
+  if (!a || !c) {
+    holder.innerHTML = `<div class="empty-state">Pick a marking job from the dashboard to begin.<br>
+      <button class="btn" onclick="goDashboard()">Go to dashboard</button></div>`;
     return;
   }
   if (!s) {
@@ -749,19 +774,20 @@ function renderPaper() {
       <button class="btn" onclick="gotoNextUnmarked()">Next unmarked paper</button></div>`;
     return;
   }
+  const m = ensureMark(a, s.id);
   const idx = c.students.indexOf(s) + 1;
-  const tagsHtml = s.tags.length
-    ? s.tags.map(tid => `<span class="ptag">${esc(tagName(tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
+  const tagsHtml = m.tags.length
+    ? m.tags.map(tid => `<span class="ptag">${esc(tagName(tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
     : '<span class="paper-empty-tags">Click tags on the right as you spot mistakes.</span>';
   holder.innerHTML = `
-    <div class="paper-pos">PAPER ${idx} OF ${c.students.length}</div>
+    <div class="paper-pos">PAPER ${idx} OF ${c.students.length} · ${esc(a.name)}</div>
     <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
     <div class="paper-tags">${tagsHtml}</div>
-    <textarea id="noteInput" placeholder="Optional note for this paper (goes into the feedback prompt)">${esc(s.note || '')}</textarea>
+    <textarea id="noteInput" placeholder="Optional note for this paper (goes into the feedback prompt)">${esc(m.note || '')}</textarea>
     <div class="paper-actions">
       <button class="btn btn-done" onclick="markDone()">✓ Mark done</button>
       <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
-      <button class="btn btn-missing" onclick="toggleMissing()">${s.status === 'missing' ? 'Un-mark missing' : 'Not submitted'}</button>
+      <button class="btn btn-missing" onclick="toggleMissing()">${m.status === 'missing' ? 'Un-mark missing' : 'Not submitted'}</button>
     </div>
     <div class="nav-row">
       <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
@@ -769,25 +795,27 @@ function renderPaper() {
       <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
-    s.note = e.target.value; save(); renderRoster();
+    ensureMark(a, s.id).note = e.target.value; save(); renderRoster();
   });
 }
 
 function renderTags() {
   const list = document.getElementById('tagList');
   list.innerHTML = '';
+  const a = curAssessment();
   const s = curStudent();
+  const m = (a && s) ? markOf(a, s.id) : null;
   if (!S.tags.length) {
-    list.innerHTML = '<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency so common mistakes rise to the top.</div>';
+    list.innerHTML = '<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency within this assessment so common mistakes rise to the top.</div>';
     document.getElementById('tagTotal').textContent = '';
     return;
   }
-  const counts = S.tags.map(t => ({ t, n: tagCount(t.id) }));
-  counts.sort((a, b) => b.n - a.n || a.t.name.localeCompare(b.t.name));
+  const counts = S.tags.map(t => ({ t, n: a ? tagCountInAssessment(a, t.id) : 0 }));
+  counts.sort((x, y) => y.n - x.n || x.t.name.localeCompare(y.t.name));
   const max = Math.max(1, ...counts.map(x => x.n));
   counts.forEach(({ t, n }) => {
     const row = document.createElement('div');
-    row.className = 'tag-row' + (s && s.tags.includes(t.id) ? ' on-paper' : '');
+    row.className = 'tag-row' + (m && m.tags.includes(t.id) ? ' on-paper' : '');
     row.innerHTML = `<span class="tag-name">${esc(t.name)}</span><span class="tag-count">×${n}</span>`;
     row.onclick = () => toggleTagOnPaper(t.id);
     list.appendChild(row);
@@ -798,23 +826,25 @@ function renderTags() {
       list.appendChild(bar);
     }
   });
-  const total = counts.reduce((a, x) => a + x.n, 0);
+  const total = counts.reduce((acc, x) => acc + x.n, 0);
   document.getElementById('tagTotal').textContent = total ? `${total} logged` : '';
 }
 
 // ---------------- Actions ----------------
 function toggleTagOnPaper(tagId) {
-  const s = curStudent();
-  if (!s) { toast('Select a paper first'); return; }
-  const i = s.tags.indexOf(tagId);
-  if (i >= 0) s.tags.splice(i, 1); else s.tags.push(tagId);
+  const a = curAssessment(); const s = curStudent();
+  if (!a || !s) { toast('Select a paper first'); return; }
+  const m = ensureMark(a, s.id);
+  const i = m.tags.indexOf(tagId);
+  if (i >= 0) m.tags.splice(i, 1); else m.tags.push(tagId);
   save(); renderRoster(); renderPaper(); renderTags();
 }
 function removeTagFromPaper(tagId) {
-  const s = curStudent();
-  if (!s) return;
-  const i = s.tags.indexOf(tagId);
-  if (i >= 0) s.tags.splice(i, 1);
+  const a = curAssessment(); const s = curStudent();
+  if (!a || !s) return;
+  const m = ensureMark(a, s.id);
+  const i = m.tags.indexOf(tagId);
+  if (i >= 0) m.tags.splice(i, 1);
   save(); renderRoster(); renderPaper(); renderTags();
 }
 function addTag() {
@@ -824,18 +854,18 @@ function addTag() {
   if (S.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Tag already exists'); return; }
   const t = { id: uid(), name };
   S.tags.push(t);
-  const s = curStudent();
-  if (s) s.tags.push(t.id);   // adding a tag mid-paper almost always means you just saw it
+  const a = curAssessment(); const s = curStudent();
+  if (a && s) ensureMark(a, s.id).tags.push(t.id);   // adding a tag mid-paper almost always means you just saw it
   input.value = '';
   save(); render();
 }
 
 function markDone() {
-  const s = curStudent();
-  const c = curClass();
-  if (!s || !c) return;
-  s.status = 'marked';
-  s.markedAt = new Date().toISOString();
+  const a = curAssessment(); const c = curClass(); const s = curStudent();
+  if (!a || !c || !s) return;
+  const m = ensureMark(a, s.id);
+  m.status = 'marked';
+  m.markedAt = new Date().toISOString();
   save();
   render();
   // tick animation on the row
@@ -845,15 +875,16 @@ function markDone() {
     rows[idx].classList.add('just-marked');
     setTimeout(() => rows[idx] && rows[idx].classList.remove('just-marked'), 950);
   }
-  maybeCalibrate(c);
+  maybeCalibrate(a);
   setTimeout(gotoNextUnmarked, 350);
 }
 
 function toggleMissing() {
-  const s = curStudent();
-  if (!s) return;
-  s.status = s.status === 'missing' ? 'unmarked' : 'missing';
-  if (s.status === 'missing') s.markedAt = null;
+  const a = curAssessment(); const s = curStudent();
+  if (!a || !s) return;
+  const m = ensureMark(a, s.id);
+  m.status = m.status === 'missing' ? 'unmarked' : 'missing';
+  if (m.status === 'missing') m.markedAt = null;
   save(); render();
 }
 
@@ -866,60 +897,62 @@ function step(dir) {
   save(); render();
 }
 function gotoNextUnmarked() {
-  const c = curClass();
-  if (!c) return;
+  const a = curAssessment(); const c = curClass();
+  if (!a || !c) return;
   const start = Math.max(0, c.students.findIndex(s => s.id === S.ui.currentStudent));
   const n = c.students.length;
   for (let k = 1; k <= n; k++) {
     const s = c.students[(start + k) % n];
-    if (s.status === 'unmarked') { S.ui.currentStudent = s.id; save(); render(); return; }
+    if (markOf(a, s.id).status === 'unmarked') { S.ui.currentStudent = s.id; save(); render(); return; }
   }
   // none left unmarked
   S.ui.currentStudent = null; save(); render();
-  toast('All papers in this class are done 🎉');
+  toast('All papers in this assessment are done 🎉');
 }
 
 // ---------------- Calibration ----------------
-function maybeCalibrate(c) {
+function maybeCalibrate(a) {
   const every = S.settings.calibrateEvery;
   if (!every) return;
-  const marked = c.students.filter(s => s.status === 'marked');
+  const c = classOf(a);
+  if (!c) return;
+  const marked = c.students.map(s => ({ s, m: markOf(a, s.id) })).filter(x => x.m.status === 'marked');
   if (marked.length && marked.length % every === 0) {
-    const first = marked.slice().sort((a, b) => (a.markedAt || '').localeCompare(b.markedAt || ''))[0];
+    const first = marked.slice().sort((x, y) => (x.m.markedAt || '').localeCompare(y.m.markedAt || ''))[0];
     const holder = document.getElementById('calibHolder');
     holder.innerHTML = `<div class="calib-banner">
-      <span>Calibration check: re-read your first marked paper (${esc(first.label)}) and confirm you'd give it the same mark.</span>
+      <span>Calibration check: re-read your first marked paper (${esc(first.s.label)}) and confirm you'd give it the same mark.</span>
       <button onclick="this.parentElement.remove()">×</button></div>`;
   }
 }
 
 // ---------------- Exports ----------------
 function copyPrompt() {
-  const s = curStudent(); const c = curClass();
-  if (!s || !c) return;
-  const lines = s.tags.map(tid => '- ' + tagName(tid));
-  let txt = `Write a feedback comment for ${s.first}, a student in my ${c.name} class.\n\n`;
+  const a = curAssessment(); const c = curClass(); const s = curStudent();
+  if (!a || !c || !s) return;
+  const m = markOf(a, s.id);
+  const lines = m.tags.map(tid => '- ' + tagName(tid));
+  let txt = `Write a feedback comment for ${s.first}, a student in my ${c.name} class, on ${a.name}.\n\n`;
   txt += lines.length
     ? `Observed issues from my marking:\n${lines.join('\n')}\n`
     : `No specific recurring issues were tagged; the work was broadly sound.\n`;
-  if (s.note && s.note.trim()) txt += `\nMarker's note: ${s.note.trim()}\n`;
+  if (m.note && m.note.trim()) txt += `\nMarker's note: ${m.note.trim()}\n`;
   txt += `\nRequirements: address the student directly by first name; encouraging but honest; specific and actionable; around 80 words; plain readable prose; do not invent issues beyond those listed.`;
   clip(txt, 'Feedback prompt copied');
 }
 
-function copyClassSummary() {
-  const c = curClass();
-  if (!c) { toast('Select a class first'); return; }
-  const marked = c.students.filter(s => s.status === 'marked').length;
-  const missing = c.students.filter(s => s.status === 'missing').length;
+function copyAssessmentSummary() {
+  const a = curAssessment(); const c = curClass();
+  if (!a || !c) { toast('Open a marking job first'); return; }
+  const st = assessmentStats(a);
   const freq = {};
-  c.students.forEach(s => s.tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
+  c.students.forEach(s => markOf(a, s.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
   const rows = Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
+    .sort((x, y) => y[1] - x[1])
     .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(tid)}`);
-  let txt = `${c.name} — tag summary (${marked}/${c.students.length} marked, ${missing} missing)\n`;
+  let txt = `${c.name} — ${a.name} — tag summary (${st.marked}/${c.students.length} marked, ${st.missing} missing)\n`;
   txt += rows.length ? rows.join('\n') : '(no tags logged)';
-  clip(txt, 'Class summary copied');
+  clip(txt, 'Assessment summary copied');
 }
 
 function clip(text, msg) {
@@ -936,9 +969,10 @@ function fallbackClip(text, msg) {
 
 // ---------------- Settings ----------------
 function openSettings() {
-  document.getElementById('endDate').value = S.settings.endDate || '';
   document.getElementById('calibSelect').value = String(S.settings.calibrateEvery || 0);
   renderClassList();
+  renderAssessmentList();
+  populateAssessClassSelect();
   document.getElementById('settingsOverlay').classList.add('open');
 }
 function closeSettings() {
@@ -954,14 +988,50 @@ function renderClassList() {
     d.innerHTML = `<span>${esc(c.name)}</span><span style="color:var(--faint)">${c.students.length} students</span>
       <button class="del" title="Delete class">×</button>`;
     d.querySelector('.del').onclick = () => {
-      if (confirm(`Delete ${c.name} and all its marking data?`)) {
+      const n = S.assessments.filter(a => a.classId === c.id).length;
+      if (confirm(`Delete ${c.name}${n ? ` and its ${n} assessment${n === 1 ? '' : 's'}` : ''}? This cannot be undone.`)) {
         S.classes = S.classes.filter(x => x.id !== c.id);
-        if (S.ui.currentClass === c.id) { S.ui.currentClass = null; S.ui.currentStudent = null; }
-        save(); renderClassList(); render();
+        S.assessments = S.assessments.filter(a => a.classId !== c.id);
+        if (S.ui.currentClass === c.id) { S.ui.currentClass = null; S.ui.currentAssessment = null; S.ui.currentStudent = null; }
+        save(); renderClassList(); renderAssessmentList(); populateAssessClassSelect(); render();
       }
     };
     holder.appendChild(d);
   });
+}
+function renderAssessmentList() {
+  const holder = document.getElementById('assessmentList');
+  if (!S.assessments.length) {
+    holder.innerHTML = '<div style="color:var(--faint);font-size:12px;margin-bottom:8px;">No assessments yet.</div>';
+    return;
+  }
+  holder.innerHTML = '';
+  S.assessments.slice()
+    .sort((a, b) => a.classId.localeCompare(b.classId) || (a.createdAt || '').localeCompare(b.createdAt || ''))
+    .forEach(a => {
+      const cls = classOf(a);
+      const st = assessmentStats(a);
+      const due = a.dueDate ? `due ${a.dueDate}` : 'no due date';
+      const d = document.createElement('div');
+      d.className = 'cls-item';
+      d.innerHTML = `<span>${esc(cls ? cls.name : '?')} — ${esc(a.name)}</span>
+        <span style="color:var(--faint)">${st.marked}/${st.denom} · ${esc(due)}</span>
+        <button class="del" title="Delete assessment">×</button>`;
+      d.querySelector('.del').onclick = () => {
+        if (confirm(`Delete assessment "${a.name}" and its marking? This cannot be undone.`)) {
+          S.assessments = S.assessments.filter(x => x.id !== a.id);
+          if (S.ui.currentAssessment === a.id) { S.ui.currentAssessment = null; S.ui.currentStudent = null; }
+          save(); renderAssessmentList(); render();
+        }
+      };
+      holder.appendChild(d);
+    });
+}
+function populateAssessClassSelect() {
+  const sel = document.getElementById('newAssessClass');
+  sel.innerHTML = S.classes.length
+    ? S.classes.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+    : '<option value="">(add a class first)</option>';
 }
 function addClass() {
   const name = document.getElementById('newClassName').value.trim();
@@ -971,32 +1041,51 @@ function addClass() {
     const parts = line.split(/\s+/);
     const first = parts[0];
     const last = parts.length > 1 ? parts[parts.length - 1] : '';
-    return { id: uid(), first, last, label: '', status: 'unmarked', tags: [], note: '', markedAt: null };
+    return { id: uid(), first, last, label: '' };
   });
   buildLabels(students);
   S.classes.push({ id: uid(), name, students });
-  if (!S.ui.currentClass) S.ui.currentClass = S.classes[S.classes.length - 1].id;
   document.getElementById('newClassName').value = '';
   document.getElementById('newRoster').value = '';
-  save(); renderClassList(); render();
+  save(); renderClassList(); populateAssessClassSelect(); render();
   toast(`${name} added, ${students.length} students`);
+}
+function addAssessment() {
+  const classId = document.getElementById('newAssessClass').value;
+  const name = document.getElementById('newAssessName').value.trim();
+  const due = document.getElementById('newAssessDue').value;
+  if (!classId) { toast('Add a class first'); return; }
+  if (!name) { toast('Assessment needs a name'); return; }
+  const cls = S.classes.find(c => c.id === classId);
+  if (!cls) { toast('Class not found'); return; }
+  const marks = {};
+  cls.students.forEach(s => { marks[s.id] = DEFAULT_MARK(); });
+  const a = { id: uid(), classId, name, dueDate: due || '', createdAt: new Date().toISOString(), marks };
+  S.assessments.push(a);
+  document.getElementById('newAssessName').value = '';
+  document.getElementById('newAssessDue').value = '';
+  save(); renderAssessmentList(); render();
+  toast(`${name} added to ${cls.name}`);
 }
 
 function exportBackup() {
   const blob = new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `marking-console-backup-${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const aEl = document.createElement('a');
+  aEl.href = URL.createObjectURL(blob);
+  aEl.download = `marking-console-backup-${todayStr()}.json`;
+  aEl.click();
+  URL.revokeObjectURL(aEl.href);
 }
 function importBackup(file) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!data.classes || !data.tags) throw new Error('bad shape');
-      S = data; save(); render(); renderClassList();
+      if (data.assessments) { S = normalize(data); }        // v2 backup
+      else if (data.classes) { S = migrateV1(data); }        // old v1 backup
+      else throw new Error('bad shape');
+      S.ui.view = 'dashboard';
+      save(); render(); renderClassList(); renderAssessmentList(); populateAssessClassSelect();
       toast('Backup imported');
     } catch (e) { toast('Import failed: not a valid backup'); }
   };
@@ -1023,14 +1112,14 @@ document.getElementById('homeBtn').onclick = goDashboard;
 document.getElementById('themeBtn').onclick = toggleTheme;
 document.getElementById('hdrTitle').onclick = () => { if (S.ui.view === 'workspace') goDashboard(); };
 document.getElementById('closeSettingsBtn').onclick = () => {
-  S.settings.endDate = document.getElementById('endDate').value;
   S.settings.calibrateEvery = parseInt(document.getElementById('calibSelect').value, 10) || 0;
   save(); closeSettings();
 };
 document.getElementById('addClassBtn').onclick = addClass;
+document.getElementById('addAssessBtn').onclick = addAssessment;
 document.getElementById('tagAddBtn').onclick = addTag;
 document.getElementById('tagInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTag(); });
-document.getElementById('classSummaryBtn').onclick = copyClassSummary;
+document.getElementById('classSummaryBtn').onclick = copyAssessmentSummary;
 document.getElementById('exportBtn').onclick = exportBackup;
 document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
 document.getElementById('importFile').addEventListener('change', e => {
@@ -1038,21 +1127,20 @@ document.getElementById('importFile').addEventListener('change', e => {
   e.target.value = '';
 });
 document.getElementById('resetBtn').onclick = () => {
-  if (confirm('Delete ALL classes, tags, and progress? This cannot be undone.')) {
-    S = blank(); save(); renderClassList(); render();
+  if (confirm('Delete ALL classes, assessments, tags, and progress? This cannot be undone.')) {
+    S = blank(); save(); renderClassList(); renderAssessmentList(); populateAssessClassSelect(); render();
   }
 };
 document.getElementById('settingsOverlay').addEventListener('click', e => {
   if (e.target.id === 'settingsOverlay') closeSettings();
 });
 
-// Dashboard is the landing view on every launch, even after pausing a
-// session and returning; you always come back to the overview first.
-if (!S.ui) S.ui = { currentClass: null, currentStudent: null, view: 'dashboard' };
+// Dashboard is the landing view on every launch, even after pausing a session
+// and returning; you always come back to the overview first.
 S.ui.view = 'dashboard';
 if (!S.ui.theme) S.ui.theme = 'dark';
 
-// First run: open settings automatically
+// First run: open settings automatically so classes can be added.
 if (!S.classes.length) openSettings();
 render();
 </script>

@@ -43,12 +43,26 @@ Everything is in `marking-console.html`: CSS in `<style>`, app in one
 `<script>` block, vanilla JS, no modules.
 
 - **State**: single object `S`, persisted to `localStorage` under key
-  `markingConsole.v1` on every mutation via `save()`.
-- **Rendering**: full re-render per region (`renderHeader`, `renderChips`,
-  `renderRoster`, `renderPaper`, `renderTags`), all called by `render()`.
-  No virtual DOM, no diffing; the data is small enough that this is fine.
-- **Tag counts are derived**, never stored: `tagCount()` scans all students'
-  `tags` arrays. Single source of truth; do not introduce a stored counter.
+  `markingConsole.v2` on every mutation via `save()`. `load()` reads v2, and
+  if absent falls back to the old `markingConsole.v1` and converts it via
+  `migrateV1()` (the v1 record is left in place as a safety net, not deleted).
+  `normalize()` backfills any missing keys so partial states never crash.
+- **Two-layer model**: a **class** is a persistent roster; an **assessment**
+  is a markable job attached to a class, holding that job's per-student marks
+  in a `marks` map keyed by student id. A class carries no marking state.
+- **Views**: `ui.view` toggles between the `dashboard` (landing) and the
+  `workspace` (marking). Forced to `dashboard` on every launch. Body classes
+  `view-dashboard` / `view-workspace` drive which `<main>` shows.
+- **Rendering**: full re-render per region (`renderHeader`, `renderDashboard`,
+  `renderChips`, `renderRoster`, `renderPaper`, `renderTags`), all called by
+  `render()`. No virtual DOM, no diffing; the data is small enough that this
+  is fine.
+- **Per-assessment figures are derived** via `assessmentStats(a)`: the single
+  source of truth for a job's marked/remaining/missing/target numbers, used by
+  the header, dashboard, and settings. Tag counts are derived too
+  (`tagCountInAssessment`); do not introduce a stored counter.
+- **Marks accessors**: `markOf(a, sid)` reads (returns a fresh default when
+  absent, not persisted); `ensureMark(a, sid)` creates on first write.
 
 ### Data model
 
@@ -56,53 +70,63 @@ Everything is in `marking-console.html`: CSS in `<style>`, app in one
 S = {
   classes: [{
     id, name,
-    students: [{
-      id, first, last,
-      label,                 // display label, e.g. "Sophia K"
-      status,                // 'unmarked' | 'marked' | 'missing'
-      tags: [tagId, ...],    // mistakes observed on this paper
-      note,                  // free text, included in feedback prompt
-      markedAt               // ISO string or null; drives "marked today"
-    }]
+    students: [{ id, first, last, label }]   // roster only; entry order kept
   }],
-  tags: [{ id, name }],      // global tag library, shared across classes
-  ui: { currentClass, currentStudent },
-  settings: { endDate, calibrateEvery }   // calibrateEvery: 0 = off
+  assessments: [{
+    id, classId, name,
+    dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
+    createdAt,               // ISO string
+    marks: {                 // keyed by student id
+      [studentId]: {
+        status,              // 'unmarked' | 'marked' | 'missing'
+        tags: [tagId, ...],  // mistakes observed on this paper
+        note,                // free text, included in feedback prompt
+        markedAt             // ISO string or null; drives "marked today"
+      }
+    }
+  }],
+  tags: [{ id, name }],      // global tag library, shared across everything
+  ui: { currentClass, currentAssessment, currentStudent, view, theme },
+  settings: { calibrateEvery }   // calibrateEvery: 0 = off
 }
 ```
 
 ## Key behaviours (do not break these)
 
-1. **Labels**: students sorted by surname (matches physical marking order).
-   Label is first name + shortest unique surname prefix within the class
+1. **Labels**: roster keeps the order entered or pasted (no sorting). Label
+   is first name + shortest unique surname prefix within the class
    (`buildLabels`). Collisions extend the prefix; identical full names get a
    numeric suffix. Privacy by construction: full names exist only in
    localStorage, labels are what render.
 2. **Missing ≠ unmarked**: three paper states. Missing papers are excluded
-   from the progress denominator so a class can reach 100% with
+   from an assessment's progress denominator so a job can reach 100% with
    non-submissions; missing count shows separately.
-3. **Daily target**: `ceil((remaining + markedToday) / daysLeft)`. Papers
-   marked today count toward today, so the target stays stable through the
-   day instead of shrinking as you work.
+3. **Daily target** (per assessment): `ceil((remaining + markedToday) /
+   dueDaysLeft)`, computed in `assessmentStats`. Papers marked today count
+   toward today, so the target stays stable through the day instead of
+   shrinking as you work. Each job has its own due date; the dashboard sorts
+   jobs by urgency and shows a per-job pace.
 4. **Mark done flow**: tick animation (respects `prefers-reduced-motion`),
    green row flash, auto-advance to next unmarked paper after 350 ms. The
    satisfying tick is a feature requirement, not decoration.
 5. **Tag interaction**: clicking a sidebar tag toggles it on the current
    paper. Adding a new tag while a paper is selected auto-attaches it (you
-   just saw the mistake). Sidebar sorts by global frequency, most common
-   first, with proportional bars.
+   just saw the mistake). Sidebar sorts by frequency within the current
+   assessment, most common first, with proportional bars.
 6. **Feedback prompt export** (`copyPrompt`): clipboard text containing first
-   name, class, tagged issues as a list, optional marker's note, and fixed
-   constraints (address student directly, encouraging but honest, ~80 words,
-   do not invent issues beyond those listed). The owner pastes this into
-   Claude to generate the comment.
-7. **Class tag summary** (`copyClassSummary`): frequency table per class,
-   used for planning reteaching in the first lessons back.
+   name, class, assessment name, tagged issues as a list, optional marker's
+   note, and fixed constraints (address student directly, encouraging but
+   honest, ~80 words, do not invent issues beyond those listed). The owner
+   pastes this into Claude to generate the comment.
+7. **Assessment tag summary** (`copyAssessmentSummary`): frequency table for
+   the current assessment, used for planning reteaching of that topic.
 8. **Calibration check**: optional, off by default. Every N marked papers in
-   a class, a banner suggests re-reading the first marked paper for drift.
+   an assessment, a banner suggests re-reading the first marked paper for
+   drift.
 9. **Backup**: JSON export/import of the whole state. localStorage is
-   fragile (Safari eviction); this is the safety net. Preserve import
-   validation (`classes` and `tags` keys must exist).
+   fragile (Safari eviction); this is the safety net. Import accepts a v2
+   backup (has `assessments`) or an old v1 backup (has `classes`), converting
+   the latter via `migrateV1()`.
 10. **All user text is escaped** through `esc()` before hitting innerHTML.
     Keep it that way for any new rendering code.
 
@@ -114,6 +138,11 @@ Mono for data readouts and labels. Palette in CSS custom properties at the
 top of the stylesheet: amber (`--amber`) is the primary accent and active
 state, green strictly for completion, red for missing, cyan for copy/export
 actions. Reuse the variables; do not introduce new hex values inline.
+
+Two themes: night (default) and a cream/pastel light mode, toggled from the
+header and persisted in `ui.theme`. Light mode is a second palette under
+`body.theme-light` that overrides the same variables, so every rule inherits
+it; keep new colours as variables so both themes stay in sync.
 
 ## Roadmap (agreed direction, not yet built)
 
@@ -129,6 +158,8 @@ actions. Reuse the variables; do not introduce new hex values inline.
 
 No test framework. Sanity check after changes:
 `node --check` on the extracted script block, then manual test of: first-run
-setup, roster paste with duplicate first names, mark/unmark/missing cycle,
-tag toggle, both clipboard exports, JSON export/import round-trip, and a
+setup (add a class, then an assessment), roster paste with duplicate first
+names, opening a job from the dashboard, mark/unmark/missing cycle, tag
+toggle, both clipboard exports, JSON export/import round-trip, theme toggle,
+v1→v2 migration (load with only a `markingConsole.v1` key present), and a
 reload to confirm persistence.
