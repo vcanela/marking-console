@@ -147,10 +147,17 @@ S = {
 
 Dark instrument-panel aesthetic, consistent with the owner's other tools
 (Jaynes–Cummings simulation, lesson planner). IBM Plex Sans for UI, IBM Plex
-Mono for data readouts and labels. Palette in CSS custom properties at the
-top of the stylesheet: amber (`--amber`) is the primary accent and active
-state, green strictly for completion, red for missing, cyan for copy/export
-actions. Reuse the variables; do not introduce new hex values inline.
+Mono for data readouts and labels.
+
+Colours are the Okabe-Ito colourblind-safe palette, held in CSS custom
+properties at the top of the stylesheet. Variable names are kept from the
+earlier scheme, so the names no longer match the hues; the roles are what
+matter: `--amber` = orange (primary accent / active), `--green` = completion,
+`--red` = vermillion (missing / danger), `--cyan` = sky blue on dark / blue on
+light (copy, export, info), `--purple` = the tag system, `--warn` = yellow
+(calibration). Reuse the variables; do not introduce new hex values inline.
+The light theme uses darker shades of the same hues so text keeps contrast on
+cream; the hue relationships that carry the colourblind distinction are kept.
 
 Two themes: night (default) and a cream/pastel light mode, toggled from the
 header and persisted in `ui.theme`. Light mode is a second palette under
