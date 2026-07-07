@@ -24,6 +24,23 @@
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
+  /* Light theme: warm cream base, pastel accents, same colour meanings.
+     Only the palette variables change; every rule above reads these. */
+  body.theme-light {
+    --bg: #f4efe4;
+    --panel: #fbf8f1;
+    --panel-2: #ece4d5;
+    --border: #ddd2bd;
+    --text: #3a3327;
+    --muted: #776e5c;
+    --faint: #a99f8a;
+    --amber: #b9741a;
+    --amber-dim: #e6c78f;
+    --green: #2f9169;
+    --green-dim: #cfe9d9;
+    --red: #cf5a4e;
+    --cyan: #2585a0;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
   body {
@@ -32,6 +49,7 @@
     color: var(--text);
     font-size: 14px;
     line-height: 1.45;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
   button { font-family: inherit; cursor: pointer; }
   input, textarea, select { font-family: inherit; }
@@ -57,6 +75,11 @@
     border-radius: 6px; padding: 4px 12px; font-family: var(--mono); font-size: 11px;
   }
   #homeBtn:hover { border-color: var(--amber); color: var(--amber); }
+  #themeBtn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 4px 12px; font-family: var(--mono); font-size: 11px;
+  }
+  #themeBtn:hover { border-color: var(--amber); color: var(--amber); }
   .hdr-title { cursor: default; }
   body.view-workspace #homeBtn { display: inline-block; }
   body.view-workspace .hdr-title { cursor: pointer; }
@@ -325,6 +348,7 @@
       <span class="today-hit">marked today <b id="statToday">0</b></span>
       <span>missing <b id="statMissing">0</b></span>
     </div>
+    <button id="themeBtn" title="Toggle light/dark">☀ Light</button>
     <button id="settingsBtn">Set up</button>
   </div>
   <div class="progress-wrap">
@@ -414,7 +438,7 @@ const KEY = 'markingConsole.v1';
 const blank = () => ({
   classes: [],          // {id, name, students:[{id, first, last, label, status:'unmarked'|'marked'|'missing', tags:[], note:'', markedAt:null}]}
   tags: [],             // {id, name}
-  ui: { currentClass: null, currentStudent: null, view: 'dashboard' },
+  ui: { currentClass: null, currentStudent: null, view: 'dashboard', theme: 'dark' },
   settings: { endDate: '', calibrateEvery: 0 }
 });
 let S = load();
@@ -512,7 +536,15 @@ function render() {
   const view = (S.ui.view === 'workspace') ? 'workspace' : 'dashboard';
   document.body.classList.toggle('view-dashboard', view === 'dashboard');
   document.body.classList.toggle('view-workspace', view === 'workspace');
+  const light = S.ui.theme === 'light';
+  document.body.classList.toggle('theme-light', light);
+  document.getElementById('themeBtn').textContent = light ? '☾ Night' : '☀ Light';
   renderHeader(); renderDashboard(); renderChips(); renderRoster(); renderPaper(); renderTags();
+}
+
+function toggleTheme() {
+  S.ui.theme = S.ui.theme === 'light' ? 'dark' : 'light';
+  save(); render();
 }
 
 function renderHeader() {
@@ -988,6 +1020,7 @@ function toast(msg) {
 // ---------------- Wiring ----------------
 document.getElementById('settingsBtn').onclick = openSettings;
 document.getElementById('homeBtn').onclick = goDashboard;
+document.getElementById('themeBtn').onclick = toggleTheme;
 document.getElementById('hdrTitle').onclick = () => { if (S.ui.view === 'workspace') goDashboard(); };
 document.getElementById('closeSettingsBtn').onclick = () => {
   S.settings.endDate = document.getElementById('endDate').value;
@@ -1017,6 +1050,7 @@ document.getElementById('settingsOverlay').addEventListener('click', e => {
 // session and returning; you always come back to the overview first.
 if (!S.ui) S.ui = { currentClass: null, currentStudent: null, view: 'dashboard' };
 S.ui.view = 'dashboard';
+if (!S.ui.theme) S.ui.theme = 'dark';
 
 // First run: open settings automatically
 if (!S.classes.length) openSettings();
