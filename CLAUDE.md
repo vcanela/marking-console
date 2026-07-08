@@ -150,13 +150,13 @@ Dark instrument-panel aesthetic, consistent with the owner's other tools
 Mono for data readouts and labels.
 
 Colours are the Okabe-Ito colourblind-safe palette, held in CSS custom
-properties at the top of the stylesheet. Variable names are kept from the
-earlier scheme, so the names no longer match the hues; the roles are what
-matter: `--amber` = orange (primary accent / active), `--green` = completion,
-`--red` = vermillion (missing / danger), `--cyan` = sky blue on dark / blue on
-light (copy, export, info), `--purple` = the tag system, `--warn` = yellow
-(calibration). Reuse the variables; do not introduce new hex values inline.
-The light theme uses darker shades of the same hues so text keeps contrast on
+properties at the top of the stylesheet with semantic names: `--accent` =
+orange (primary accent / active), `--success` = green (completion), `--danger`
+= vermillion (missing / danger), `--info` = sky blue on dark / blue on light
+(copy, export, info), `--tag` = purple (tag system), `--warn` = yellow
+(calibration); each has a `-dim` companion where needed. Reuse the variables;
+do not introduce new hex values inline. The light theme (`body.theme-light`)
+overrides these same variables with darker shades so text keeps contrast on
 cream; the hue relationships that carry the colourblind distinction are kept.
 
 Two themes: night (default) and a cream/pastel light mode, toggled from the
