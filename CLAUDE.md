@@ -73,30 +73,37 @@ Everything is in `marking-console.html`: CSS in `<style>`, app in one
 
 ```js
 S = {
+  meta: { deviceId, updatedAt },   // deviceId per browser; updatedAt tracks non-entity changes (settings/import)
   classes: [{
-    id, name,
-    students: [{ id, first, last, label }]   // roster only; entry order kept
+    id, name, updatedAt,
+    students: [{ id, first, last, label, updatedAt }]   // roster only; entry order kept
   }],
   assessments: [{
     id, classId, name,
     dateSat,                 // '' or 'YYYY-MM-DD'; a future date marks the job "upcoming"
     dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
-    createdAt,               // ISO string
+    createdAt, updatedAt,    // ISO strings
     marks: {                 // keyed by student id
       [studentId]: {
         status,              // 'unmarked' | 'marked' | 'missing'
         tags: [tagId, ...],  // mistakes observed on this paper
         note,                // free text, included in feedback prompt
         markedAt,            // ISO string or null; drives "marked today"
-        satOn                // '' or 'YYYY-MM-DD'; per-student sit override (default = dateSat)
+        satOn,               // '' or 'YYYY-MM-DD'; per-student sit override (default = dateSat)
+        updatedAt            // ISO string; drives sync merge (newer wins per paper)
       }
     }
   }],
-  tags: [{ id, name }],      // global tag library, shared across everything
-  ui: { currentClass, currentAssessment, currentStudent, view, theme },
+  tags: [{ id, name, updatedAt }],   // global tag library, shared across everything
+  tombstones: { [id]: deletedAtISO },// deleted class/assessment/tag ids, so a merge cannot resurrect them
+  ui: { currentClass, currentAssessment, currentStudent, view, theme },  // device-local; NOT synced
   settings: { calibrateEvery }   // calibrateEvery: 0 = off
 }
 ```
+
+Every entity carries `updatedAt`, stamped on each mutation, so sync can merge at
+the per-paper level. `ui` is deliberately device-local (theme and current
+selections differ per device) and is excluded from the synced document.
 
 ## Key behaviours (do not break these)
 
@@ -142,6 +149,18 @@ S = {
    the latter via `migrateV1()`.
 10. **All user text is escaped** through `esc()` before hitting innerHTML.
     Keep it that way for any new rendering code.
+11. **Sync** (optional, off until configured): whole state syncs through one
+    secret GitHub gist. The token and gist id live in their own localStorage
+    key (`markingConsole.sync`), never in `S`, so they never reach the gist or
+    a backup. Sync is pull, merge, push in one action (`syncNow`); the merge
+    (`mergeDocs`) is deterministic, commutative and idempotent, combining both
+    sides by per-entity/per-mark `updatedAt` with tombstones for deletions, so
+    two devices converge with no data loss and no forced conflict choice.
+    Auto-sync runs on open and debounced after edits; a header button and a Set
+    up section drive it manually. Comparison and the gist body use a **canonical
+    serialisation** (`docString`: sorted keys, entity arrays sorted by id,
+    deviceId excluded) so identical data never ping-pongs between devices. The
+    gist holds student names, so it is secret by construction (`public:false`).
 
 ## Design language
 
@@ -182,4 +201,8 @@ setup (add a class, then an assessment), roster paste with duplicate first
 names, opening a job from the dashboard, mark/unmark/missing cycle, tag
 toggle, both clipboard exports, JSON export/import round-trip, theme toggle,
 v1→v2 migration (load with only a `markingConsole.v1` key present), and a
-reload to confirm persistence.
+reload to confirm persistence. For sync, the merge (`mergeDocs`) can be tested
+without a token by mocking `gistGet`/`gistPatch`/`gistCreate` in the console:
+check convergence (`docString(mergeDocs(A,B)) === docString(mergeDocs(B,A))`),
+idempotence, that two devices' marks on different papers both survive, and that
+deletions do not resurrect. The live gist round-trip needs a real token.

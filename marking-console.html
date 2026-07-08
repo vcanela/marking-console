@@ -88,6 +88,16 @@
     border-radius: 6px; padding: 4px 12px; font-family: var(--mono); font-size: 11px;
   }
   #themeBtn:hover { border-color: var(--accent); color: var(--accent); }
+  #syncBtn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 4px 12px; font-family: var(--mono); font-size: 11px;
+  }
+  #syncBtn:hover { border-color: var(--info); color: var(--info); }
+  .sync-help { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
+  .mono-inline { font-family: var(--mono); font-size: 11px; color: var(--info); }
+  .sync-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .sync-check input { width: auto; margin: 0; }
+  .sync-status { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-bottom: 6px; line-height: 1.5; }
   .hdr-title { cursor: default; }
   body.view-workspace #homeBtn { display: inline-block; }
   body.view-workspace .hdr-title { cursor: pointer; }
@@ -360,6 +370,7 @@
       <span class="today-hit">marked today <b id="statToday">0</b></span>
       <span>missing <b id="statMissing">0</b></span>
     </div>
+    <button id="syncBtn" title="Sync">⟳ Sync</button>
     <button id="themeBtn" title="Toggle light/dark">☀ Light</button>
     <button id="settingsBtn">Set up</button>
   </div>
@@ -423,6 +434,23 @@
       <option value="10">10 papers</option>
     </select>
 
+    <h3>Sync across devices</h3>
+    <p class="sync-help">Syncs your whole state through one secret GitHub gist, so you can mark on your
+      computer and phone. Create a token at <span class="mono-inline">github.com/settings/tokens</span>
+      (classic, scope <span class="mono-inline">gist</span>), paste it below, then press Sync now. On a
+      second device, paste the same token and the gist id.</p>
+    <label for="syncToken">GitHub token (kept only on this device)</label>
+    <input type="password" id="syncToken" placeholder="ghp_… or github_pat_…" autocomplete="off">
+    <label for="syncGist">Gist id (leave blank on the first device; it is created for you)</label>
+    <input type="text" id="syncGist" placeholder="e.g. 1a2b3c4d…">
+    <label class="sync-check"><input type="checkbox" id="syncAuto" checked> Sync automatically (on open and shortly after edits)</label>
+    <div class="sync-status" id="syncStatus"></div>
+    <div class="modal-actions" style="margin-top:6px;">
+      <button class="btn btn-done" id="syncNowBtn">Sync now</button>
+      <button class="btn" id="syncSaveBtn">Save sync settings</button>
+      <button class="btn btn-danger" id="syncUnlinkBtn">Turn off sync</button>
+    </div>
+
     <h3>Data</h3>
     <div class="modal-actions" style="margin-top:6px;">
       <button class="btn" id="exportBtn">Export backup (JSON)</button>
@@ -467,12 +495,14 @@
 const KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
 
-const DEFAULT_MARK = () => ({ status: 'unmarked', tags: [], note: '', markedAt: null, satOn: '' });
+const DEFAULT_MARK = () => ({ status: 'unmarked', tags: [], note: '', markedAt: null, satOn: '', updatedAt: '' });
 
 const blank = () => ({
-  classes: [],          // {id, name, students:[{id, first, last, label}]}
-  assessments: [],      // {id, classId, name, dueDate, createdAt, marks:{studentId:{status,tags,note,markedAt}}}
-  tags: [],             // {id, name}
+  meta: { deviceId: uid() + uid(), updatedAt: '' },   // deviceId is per-browser; updatedAt tracks non-entity changes
+  classes: [],          // {id, name, updatedAt, students:[{id, first, last, label, updatedAt}]}
+  assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, marks:{sid:{...,updatedAt}}}
+  tags: [],             // {id, name, updatedAt}
+  tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/tags
   ui: { currentClass: null, currentAssessment: null, currentStudent: null, view: 'dashboard', theme: 'dark' },
   settings: { calibrateEvery: 0 }
 });
@@ -496,7 +526,20 @@ function normalize(d) {
   d.classes = Array.isArray(d.classes) ? d.classes : [];
   d.assessments = Array.isArray(d.assessments) ? d.assessments : [];
   d.tags = Array.isArray(d.tags) ? d.tags : [];
-  d.assessments.forEach(a => { if (!a.marks || typeof a.marks !== 'object') a.marks = {}; });
+  d.tombstones = (d.tombstones && typeof d.tombstones === 'object') ? d.tombstones : {};
+  d.meta = Object.assign({ deviceId: '', updatedAt: '' }, d.meta || {});
+  if (!d.meta.deviceId) d.meta.deviceId = uid() + uid();
+  // Backfill sync timestamps so older data merges predictably (real edits win).
+  d.tags.forEach(t => { if (t.updatedAt == null) t.updatedAt = ''; });
+  d.classes.forEach(c => {
+    if (c.updatedAt == null) c.updatedAt = '';
+    (c.students || []).forEach(s => { if (s.updatedAt == null) s.updatedAt = ''; });
+  });
+  d.assessments.forEach(a => {
+    if (!a.marks || typeof a.marks !== 'object') a.marks = {};
+    if (a.updatedAt == null) a.updatedAt = a.createdAt || '';
+    Object.values(a.marks).forEach(m => { if (m.updatedAt == null) m.updatedAt = m.markedAt || ''; });
+  });
   d.ui = Object.assign({}, b.ui, d.ui || {});
   d.settings = Object.assign({}, b.settings, d.settings || {});
   return d;
@@ -521,12 +564,13 @@ function migrateV1(d) {
     });
     out.assessments.push({ id: uid(), classId: oldC.id, name: 'Assessment 1', dueDate: due, createdAt: new Date().toISOString(), marks });
   });
-  return out;
+  return normalize(out);   // backfill sync timestamps and any missing keys
 }
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Warning: could not save'); }
+  scheduleSync();          // auto-push shortly after a data change (if sync is on)
 }
 // Function declaration (hoisted) so load()/migrateV1() can call it before this
 // point in source order.
@@ -550,6 +594,7 @@ function ensureMark(a, sid) { if (!a.marks[sid]) a.marks[sid] = DEFAULT_MARK(); 
 const tagName = tagId => (S.tags.find(t => t.id === tagId) || {}).name || '?';
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+function nowISO() { return new Date().toISOString(); }
 function dueDaysLeft(a) {
   if (!a || !a.dueDate) return null;
   const end = new Date(a.dueDate + 'T23:59:59');
@@ -631,6 +676,7 @@ function render() {
   document.body.classList.toggle('theme-light', light);
   document.getElementById('themeBtn').textContent = light ? '☾ Night' : '☀ Light';
   renderHeader(); renderDashboard(); renderChips(); renderRoster(); renderPaper(); renderTags();
+  refreshSyncUI();
 }
 
 function toggleTheme() {
@@ -852,10 +898,10 @@ function renderPaper() {
       <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
-    ensureMark(a, s.id).note = e.target.value; save(); renderRoster();
+    const mm = ensureMark(a, s.id); mm.note = e.target.value; mm.updatedAt = nowISO(); save(); renderRoster();
   });
   document.getElementById('satInput').addEventListener('change', e => {
-    ensureMark(a, s.id).satOn = e.target.value; save(); renderPaper();
+    const mm = ensureMark(a, s.id); mm.satOn = e.target.value; mm.updatedAt = nowISO(); save(); renderPaper();
   });
 }
 
@@ -897,6 +943,7 @@ function toggleTagOnPaper(tagId) {
   const m = ensureMark(a, s.id);
   const i = m.tags.indexOf(tagId);
   if (i >= 0) m.tags.splice(i, 1); else m.tags.push(tagId);
+  m.updatedAt = nowISO();
   save(); renderRoster(); renderPaper(); renderTags();
 }
 function removeTagFromPaper(tagId) {
@@ -905,6 +952,7 @@ function removeTagFromPaper(tagId) {
   const m = ensureMark(a, s.id);
   const i = m.tags.indexOf(tagId);
   if (i >= 0) m.tags.splice(i, 1);
+  m.updatedAt = nowISO();
   save(); renderRoster(); renderPaper(); renderTags();
 }
 function addTag() {
@@ -912,10 +960,10 @@ function addTag() {
   const name = input.value.trim();
   if (!name) return;
   if (S.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Tag already exists'); return; }
-  const t = { id: uid(), name };
+  const t = { id: uid(), name, updatedAt: nowISO() };
   S.tags.push(t);
   const a = curAssessment(); const s = curStudent();
-  if (a && s) ensureMark(a, s.id).tags.push(t.id);   // adding a tag mid-paper almost always means you just saw it
+  if (a && s) { const m = ensureMark(a, s.id); m.tags.push(t.id); m.updatedAt = nowISO(); }   // adding a tag mid-paper almost always means you just saw it
   input.value = '';
   save(); render();
 }
@@ -925,7 +973,8 @@ function markDone() {
   if (!a || !c || !s) return;
   const m = ensureMark(a, s.id);
   m.status = 'marked';
-  m.markedAt = new Date().toISOString();
+  m.markedAt = nowISO();
+  m.updatedAt = nowISO();
   save();
   render();
   // tick animation on the row
@@ -945,6 +994,7 @@ function toggleMissing() {
   const m = ensureMark(a, s.id);
   m.status = m.status === 'missing' ? 'unmarked' : 'missing';
   if (m.status === 'missing') m.markedAt = null;
+  m.updatedAt = nowISO();
   save(); render();
 }
 
@@ -1062,6 +1112,11 @@ function fallbackClip(text, msg) {
 // ---------------- Settings ----------------
 function openSettings() {
   document.getElementById('calibSelect').value = String(S.settings.calibrateEvery || 0);
+  const cfg = loadSync();
+  document.getElementById('syncToken').value = cfg.token || '';
+  document.getElementById('syncGist').value = cfg.gistId || '';
+  document.getElementById('syncAuto').checked = cfg.auto !== false;
+  refreshSyncUI();
   renderClassList();
   document.getElementById('settingsOverlay').classList.add('open');
 }
@@ -1080,6 +1135,9 @@ function renderClassList() {
     d.querySelector('.del').onclick = () => {
       const n = S.assessments.filter(a => a.classId === c.id).length;
       if (confirm(`Delete ${c.name}${n ? ` and its ${n} assessment${n === 1 ? '' : 's'}` : ''}? This cannot be undone.`)) {
+        const ts = nowISO();
+        S.assessments.filter(a => a.classId === c.id).forEach(a => { S.tombstones[a.id] = ts; });
+        S.tombstones[c.id] = ts;
         S.classes = S.classes.filter(x => x.id !== c.id);
         S.assessments = S.assessments.filter(a => a.classId !== c.id);
         if (S.ui.currentClass === c.id) { S.ui.currentClass = null; S.ui.currentAssessment = null; S.ui.currentStudent = null; }
@@ -1107,7 +1165,7 @@ function addClass() {
     return { id: uid(), first, last, label: '' };
   });
   buildLabels(students);
-  S.classes.push({ id: uid(), name, students });
+  S.classes.push({ id: uid(), name, students, updatedAt: nowISO() });
   document.getElementById('newClassName').value = '';
   document.getElementById('newRoster').value = '';
   save(); renderClassList(); populateJobClassSelect(); render();
@@ -1153,7 +1211,7 @@ function saveJob() {
   if (editingJobId) {
     const a = S.assessments.find(x => x.id === editingJobId);
     if (!a) { closeJobModal(); return; }
-    a.name = name; a.dateSat = sat || ''; a.dueDate = due || '';
+    a.name = name; a.dateSat = sat || ''; a.dueDate = due || ''; a.updatedAt = nowISO();
     save(); closeJobModal(); render();
     toast('Job updated');
   } else {
@@ -1162,7 +1220,8 @@ function saveJob() {
     if (!cls) { toast('Pick a class'); return; }
     const marks = {};
     cls.students.forEach(s => { marks[s.id] = DEFAULT_MARK(); });
-    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: new Date().toISOString(), marks };
+    const now = nowISO();
+    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, marks };
     S.assessments.push(a);
     save(); closeJobModal(); render();
     toast(`${name} added to ${cls.name}`);
@@ -1172,6 +1231,7 @@ function deleteAssessment(aid) {
   const a = S.assessments.find(x => x.id === aid);
   if (!a) return;
   if (!confirm(`Delete "${a.name}" and its marking? This cannot be undone.`)) return;
+  S.tombstones[aid] = nowISO();
   S.assessments = S.assessments.filter(x => x.id !== aid);
   if (S.ui.currentAssessment === aid) { S.ui.currentAssessment = null; S.ui.currentStudent = null; }
   save(); render();
@@ -1194,6 +1254,7 @@ function importBackup(file) {
       else if (data.classes) { S = migrateV1(data); }        // old v1 backup
       else throw new Error('bad shape');
       S.ui.view = 'dashboard';
+      S.meta.updatedAt = nowISO();                           // treat an import as a change to push
       save(); render(); renderClassList(); populateJobClassSelect();
       toast('Backup imported');
     } catch (e) { toast('Import failed: not a valid backup'); }
@@ -1215,15 +1276,250 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+// ---------------- Sync (GitHub gist) ----------------
+// The whole state syncs through one secret gist. The token and gist id live in
+// their own localStorage key, never in S, so they never reach the gist or a
+// backup. Syncing is pull, merge, push in one action: because the merge is
+// deterministic and combines both sides, running Sync on each device converges
+// with nothing lost, regardless of order.
+const SYNC_KEY = 'markingConsole.sync';
+const GIST_FILE = 'marking-console.json';
+let syncing = false, resyncQueued = false, syncErr = false, syncTimer = null;
+
+function loadSync() {
+  try { return Object.assign({ token: '', gistId: '', auto: true, lastSyncedTs: '', lastSyncedAt: '' }, JSON.parse(localStorage.getItem(SYNC_KEY) || '{}')); }
+  catch (e) { return { token: '', gistId: '', auto: true, lastSyncedTs: '', lastSyncedAt: '' }; }
+}
+function saveSync(cfg) { try { localStorage.setItem(SYNC_KEY, JSON.stringify(cfg)); } catch (e) {} }
+
+// Highest timestamp anywhere in the data; used to tell if there are local
+// changes not yet synced.
+function dataTs() {
+  let mx = (S.meta && S.meta.updatedAt) || '';
+  const bump = t => { if (t && t > mx) mx = t; };
+  S.tags.forEach(t => bump(t.updatedAt));
+  S.classes.forEach(c => { bump(c.updatedAt); (c.students || []).forEach(s => bump(s.updatedAt)); });
+  S.assessments.forEach(a => { bump(a.updatedAt); Object.values(a.marks || {}).forEach(m => bump(m.updatedAt)); });
+  Object.values(S.tombstones || {}).forEach(bump);
+  return mx;
+}
+function isDirty() { return dataTs() > (loadSync().lastSyncedTs || ''); }
+
+// The shared document: everything except device-local ui (theme, current
+// selections, view all stay per device).
+function extractDoc(s) {
+  return {
+    meta: { deviceId: s.meta.deviceId, updatedAt: s.meta.updatedAt || '' },
+    classes: s.classes, assessments: s.assessments, tags: s.tags,
+    tombstones: s.tombstones || {}, settings: s.settings
+  };
+}
+function applyDoc(doc) {
+  S.classes = doc.classes || [];
+  S.assessments = doc.assessments || [];
+  S.tags = doc.tags || [];
+  S.tombstones = doc.tombstones || {};
+  S.settings = Object.assign({}, S.settings, doc.settings || {});
+  if (doc.meta && doc.meta.updatedAt && doc.meta.updatedAt > (S.meta.updatedAt || '')) S.meta.updatedAt = doc.meta.updatedAt;
+  S = normalize(S);            // keeps local ui and deviceId, backfills any gaps
+  save();
+}
+
+// Deterministic three-part merge: tombstones union (newest wins), entities
+// unioned by id with newer updatedAt winning per field, marks merged per
+// student by updatedAt. Commutative and idempotent.
+function mergeDocs(a, b) {
+  const tombstones = {};
+  const addTomb = src => { for (const [id, ts] of Object.entries(src || {})) if (!tombstones[id] || ts > tombstones[id]) tombstones[id] = ts; };
+  addTomb(a.tombstones); addTomb(b.tombstones);
+  const alive = e => !(tombstones[e.id] && tombstones[e.id] >= (e.updatedAt || ''));
+  const newer = (x, y) => ((y.updatedAt || '') > (x.updatedAt || '') ? y : x);
+
+  const mergeById = (listA, listB, combine) => {
+    const map = new Map();
+    (listA || []).forEach(e => map.set(e.id, e));
+    (listB || []).forEach(e => map.set(e.id, map.has(e.id) ? combine(map.get(e.id), e) : e));
+    return [...map.values()].filter(alive);
+  };
+
+  const tags = mergeById(a.tags, b.tags, newer);
+
+  const classes = mergeById(a.classes, b.classes, (x, y) => {
+    const base = newer(x, y);
+    const sMap = new Map();
+    (x.students || []).forEach(s => sMap.set(s.id, s));
+    (y.students || []).forEach(s => sMap.set(s.id, sMap.has(s.id) ? newer(sMap.get(s.id), s) : s));
+    const order = [], seen = new Set();
+    (base.students || []).forEach(s => { if (sMap.has(s.id)) { order.push(sMap.get(s.id)); seen.add(s.id); } });
+    sMap.forEach((s, id) => { if (!seen.has(id)) order.push(s); });
+    return Object.assign({}, base, { students: order });
+  });
+
+  const assessments = mergeById(a.assessments, b.assessments, (x, y) => {
+    const base = newer(x, y);
+    const marks = {};
+    new Set([...Object.keys(x.marks || {}), ...Object.keys(y.marks || {})]).forEach(sid => {
+      const mx = x.marks && x.marks[sid], my = y.marks && y.marks[sid];
+      marks[sid] = (mx && my) ? ((my.updatedAt || '') > (mx.updatedAt || '') ? my : mx) : (mx || my);
+    });
+    return Object.assign({}, base, { marks });
+  });
+
+  const aNewer = (b.meta && b.meta.updatedAt || '') > (a.meta && a.meta.updatedAt || '');
+  const settings = aNewer ? (b.settings || a.settings) : (a.settings || b.settings);
+  const meta = {
+    deviceId: (a.meta && a.meta.deviceId) || (b.meta && b.meta.deviceId) || '',
+    updatedAt: ((b.meta && b.meta.updatedAt || '') > (a.meta && a.meta.updatedAt || '')) ? b.meta.updatedAt : (a.meta && a.meta.updatedAt || '')
+  };
+  return { classes, assessments, tags, tombstones, settings, meta };
+}
+
+// Canonical serialisation so the gist content is identical whenever the data
+// is identical, regardless of object key or array order or the local
+// deviceId. Without this, two devices would rewrite the gist back and forth.
+function canonicalJSON(v) {
+  if (Array.isArray(v)) return '[' + v.map(canonicalJSON).join(',') + ']';
+  if (v && typeof v === 'object') {
+    return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canonicalJSON(v[k])).join(',') + '}';
+  }
+  return JSON.stringify(v);
+}
+function canonicalDoc(doc) {
+  const byId = (x, y) => String(x.id).localeCompare(String(y.id));
+  return {
+    meta: { updatedAt: (doc.meta && doc.meta.updatedAt) || '' },   // deviceId is device-local, excluded
+    settings: doc.settings || {},
+    tombstones: doc.tombstones || {},
+    tags: (doc.tags || []).slice().sort(byId),
+    classes: (doc.classes || []).slice().sort(byId),
+    assessments: (doc.assessments || []).slice().sort(byId)
+  };
+}
+function docString(doc) { return canonicalJSON(canonicalDoc(doc)); }
+
+function ghHeaders(token) { return { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' }; }
+async function gistGet(id, token) {
+  const r = await fetch('https://api.github.com/gists/' + id, { headers: ghHeaders(token) });
+  if (!r.ok) throw new Error('read ' + r.status);
+  const j = await r.json();
+  const f = j.files && j.files[GIST_FILE];
+  if (!f) return null;
+  let content = f.content;
+  if (f.truncated && f.raw_url) content = await (await fetch(f.raw_url)).text();
+  return JSON.parse(content);
+}
+async function gistPatch(id, token, doc) {
+  const r = await fetch('https://api.github.com/gists/' + id, { method: 'PATCH', headers: ghHeaders(token), body: JSON.stringify({ files: { [GIST_FILE]: { content: docString(doc) } } }) });
+  if (!r.ok) throw new Error('write ' + r.status);
+  return r.json();
+}
+async function gistCreate(token, doc) {
+  const r = await fetch('https://api.github.com/gists', { method: 'POST', headers: ghHeaders(token), body: JSON.stringify({ description: 'Marking Console sync (do not delete)', public: false, files: { [GIST_FILE]: { content: docString(doc) } } }) });
+  if (!r.ok) throw new Error('create ' + r.status);
+  return r.json();
+}
+
+async function syncNow(interactive) {
+  const cfg = loadSync();
+  if (!cfg.token) { if (interactive) toast('Add a sync token in Set up'); return; }
+  if (syncing) { resyncQueued = true; return; }
+  syncing = true; syncErr = false; refreshSyncUI();
+  try {
+    const localDoc = extractDoc(S);
+    let gistId = cfg.gistId, remoteDoc = null, mustPush = false;
+    if (gistId) {
+      remoteDoc = await gistGet(gistId, cfg.token);
+      if (remoteDoc === null) { remoteDoc = localDoc; mustPush = true; }   // gist exists but our file is missing
+    } else {
+      const created = await gistCreate(cfg.token, localDoc);
+      gistId = created.id; remoteDoc = localDoc;                           // create() already wrote it
+    }
+    const merged = mergeDocs(localDoc, remoteDoc);
+    if (mustPush || docString(merged) !== docString(remoteDoc)) await gistPatch(gistId, cfg.token, merged);
+    applyDoc(merged);
+    const fresh = loadSync();
+    fresh.gistId = gistId; fresh.lastSyncedTs = dataTs(); fresh.lastSyncedAt = nowISO();
+    saveSync(fresh);
+    if (interactive) toast('Synced');
+    render();
+  } catch (e) {
+    syncErr = true;
+    console.warn('sync failed', e);
+    if (interactive) toast('Sync failed: ' + (e && e.message ? e.message : e));
+  } finally {
+    syncing = false; refreshSyncUI();
+    if (resyncQueued) { resyncQueued = false; setTimeout(() => syncNow(false), 800); }
+  }
+}
+
+// Debounced auto-push after a data change, when sync is on and there is
+// something to send. Suppressed during an in-flight sync.
+function scheduleSync() {
+  const cfg = loadSync();
+  if (!cfg.token || cfg.auto === false || syncing) return;
+  if (!isDirty()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => syncNow(false), 6000);
+  refreshSyncUI();
+}
+
+function refreshSyncUI() {
+  const cfg = loadSync();
+  const btn = document.getElementById('syncBtn');
+  const status = document.getElementById('syncStatus');
+  let label, title;
+  if (!cfg.token) { label = '⟳ Sync'; title = 'Sync is off. Add a token in Set up.'; }
+  else if (syncErr) { label = '⚠ Sync'; title = 'Last sync failed. Click to retry.'; }
+  else if (syncing) { label = '⟳ Syncing…'; title = 'Syncing…'; }
+  else if (isDirty()) { label = '⟳ Sync •'; title = 'Local changes not yet synced. Click to sync now.'; }
+  else if (cfg.lastSyncedAt) { label = '✓ Synced'; title = 'Up to date. Click to sync now.'; }
+  else { label = '⟳ Sync'; title = 'Ready. Click to sync now.'; }
+  if (btn) { btn.textContent = label; btn.title = title; }
+  if (status) {
+    let s;
+    if (!cfg.token) s = 'Not configured. Paste a token below to enable syncing.';
+    else if (syncErr) s = 'Last sync failed. Check the token and connection, then Sync now.';
+    else if (syncing) s = 'Syncing…';
+    else if (!cfg.gistId) s = 'Token saved. Press "Sync now" to create the gist and link this device.';
+    else s = `Linked to gist ${cfg.gistId}. ${cfg.lastSyncedAt ? 'Last synced ' + new Date(cfg.lastSyncedAt).toLocaleString('en-NZ') : 'Not synced yet.'}${isDirty() ? ' (unsynced changes)' : ''}`;
+    status.textContent = s;
+  }
+}
+
+function saveSyncConfig() {
+  const cfg = loadSync();
+  cfg.token = document.getElementById('syncToken').value.trim();
+  cfg.gistId = document.getElementById('syncGist').value.trim();
+  cfg.auto = document.getElementById('syncAuto').checked;
+  saveSync(cfg);
+  refreshSyncUI();
+  if (cfg.token) syncNow(true); else toast('Sync settings saved');
+}
+function unlinkSync() {
+  if (!confirm('Turn off sync on this device? Your data stays here; the gist is not deleted.')) return;
+  saveSync({ token: '', gistId: '', auto: true, lastSyncedTs: '', lastSyncedAt: '' });
+  document.getElementById('syncToken').value = '';
+  document.getElementById('syncGist').value = '';
+  refreshSyncUI();
+  toast('Sync turned off on this device');
+}
+
 // ---------------- Wiring ----------------
 document.getElementById('settingsBtn').onclick = openSettings;
 document.getElementById('homeBtn').onclick = goDashboard;
 document.getElementById('themeBtn').onclick = toggleTheme;
 document.getElementById('hdrTitle').onclick = () => { if (S.ui.view === 'workspace') goDashboard(); };
 document.getElementById('closeSettingsBtn').onclick = () => {
-  S.settings.calibrateEvery = parseInt(document.getElementById('calibSelect').value, 10) || 0;
+  const prev = S.settings.calibrateEvery || 0;
+  const next = parseInt(document.getElementById('calibSelect').value, 10) || 0;
+  S.settings.calibrateEvery = next;
+  if (next !== prev) S.meta.updatedAt = nowISO();   // settings are shared, so mark for sync
   save(); closeSettings();
 };
+document.getElementById('syncBtn').onclick = () => syncNow(true);
+document.getElementById('syncSaveBtn').onclick = saveSyncConfig;
+document.getElementById('syncNowBtn').onclick = () => syncNow(true);
+document.getElementById('syncUnlinkBtn').onclick = unlinkSync;
 document.getElementById('addClassBtn').onclick = addClass;
 document.getElementById('jobSaveBtn').onclick = saveJob;
 document.getElementById('jobCancelBtn').onclick = closeJobModal;
@@ -1239,8 +1535,11 @@ document.getElementById('importFile').addEventListener('change', e => {
   e.target.value = '';
 });
 document.getElementById('resetBtn').onclick = () => {
-  if (confirm('Delete ALL classes, assessments, tags, and progress? This cannot be undone.')) {
-    S = blank(); save(); renderClassList(); populateJobClassSelect(); render();
+  if (confirm('Delete ALL classes, assessments, tags, and progress on this device, and unlink sync? This cannot be undone.')) {
+    S = blank();
+    const cfg = loadSync();                     // keep the token, drop the gist link so a reset does not re-pull
+    saveSync({ token: cfg.token, gistId: '', auto: cfg.auto, lastSyncedTs: '', lastSyncedAt: '' });
+    save(); renderClassList(); populateJobClassSelect(); render();
   }
 };
 document.getElementById('settingsOverlay').addEventListener('click', e => {
@@ -1255,6 +1554,10 @@ if (!S.ui.theme) S.ui.theme = 'dark';
 // First run: open settings automatically so classes can be added.
 if (!S.classes.length) openSettings();
 render();
+
+// Pull and merge on launch, so opening the app on either device brings in
+// whatever the other one did. Runs after first paint; failures are silent.
+if (loadSync().token) setTimeout(() => syncNow(false), 400);
 </script>
 </body>
 </html>
