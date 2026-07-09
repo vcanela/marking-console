@@ -25,7 +25,6 @@
     --info: #56B4E9;         /* sky blue: copy / export / info */
     --tag: #CC79A7;          /* purple: tag system (trip hazards) */
     --tag-dim: #6e4560;
-    --warn: #F0E442;         /* yellow: calibration attention */
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
@@ -47,7 +46,6 @@
     --info: #0072A8;         /* blue: the cool copy/info role on light */
     --tag: #9a4f7d;       /* darkened purple */
     --tag-dim: #e7cfe0;
-    --warn: #7a6100;         /* darkened yellow (gold) */
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
@@ -171,6 +169,18 @@
 
   /* ---------- Current paper column ---------- */
   .paper-col { padding: 0; display: flex; flex-direction: column; }
+  .part-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .part-tab {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 5px 11px; font-family: var(--mono); font-size: 11.5px;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .part-tab:hover { border-color: var(--accent); color: var(--accent); }
+  .part-tab.active { border-color: var(--accent); color: var(--accent); background: rgba(230, 159, 0, 0.10); }
+  .part-tab.full { color: var(--success); border-color: var(--success); }
+  .part-tab.full.active { background: rgba(0, 158, 115, 0.12); }
+  .part-tab .part-mini { color: var(--faint); }
+  .part-tab.active .part-mini { color: var(--accent-dim); }
   #paperPanel { padding: 18px 22px; }
   .paper-pos { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0.06em; }
   .paper-name { font-size: 24px; font-weight: 700; margin: 2px 0 14px; }
@@ -204,12 +214,6 @@
   .btn-copy:hover { border-color: var(--info); }
   .nav-row { display: flex; gap: 8px; margin-top: 10px; }
   .btn-nav { padding: 6px 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-  .calib-banner {
-    margin: 0 22px 12px; padding: 10px 14px; border: 1px solid var(--warn);
-    background: rgba(240, 228, 66, 0.09); border-radius: 7px; font-size: 13px; color: var(--warn);
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  }
-  .calib-banner button { background: none; border: none; color: var(--faint); font-size: 15px; }
   .empty-state { padding: 40px 22px; color: var(--faint); text-align: center; font-size: 13px; }
   .empty-state .btn { margin-top: 14px; }
   .class-summary-row { padding: 12px 22px; border-top: 1px solid var(--border); margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -393,7 +397,7 @@
   <!-- Current paper -->
   <section class="col paper-col">
     <div class="col-head"><span>Current paper</span></div>
-    <div id="calibHolder"></div>
+    <div id="partBar" class="part-bar"></div>
     <div id="paperPanel"></div>
     <div class="class-summary-row">
       <button class="btn btn-copy" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy tag summary</button>
@@ -424,15 +428,6 @@
     <label for="newRoster">Roster, one student per line, first name then last name (order preserved)</label>
     <textarea id="newRoster" placeholder="Sophia King&#10;Liam Patel&#10;Aroha Ngata"></textarea>
     <button class="btn" id="addClassBtn">Add class</button>
-
-    <h3>Calibration check</h3>
-    <label for="calibSelect">Remind me to re-read my first marked paper every…</label>
-    <select id="calibSelect">
-      <option value="0">Off</option>
-      <option value="5">5 papers</option>
-      <option value="8">8 papers</option>
-      <option value="10">10 papers</option>
-    </select>
 
     <h3>Sync across devices</h3>
     <p class="sync-help">Syncs your whole state through one secret GitHub gist, so you can mark on your
@@ -477,6 +472,9 @@
     <input type="date" id="jobSat">
     <label for="jobDue">Date marking is due (optional; drives the daily target)</label>
     <input type="date" id="jobDue">
+    <label for="jobParts">Parts, one per line (leave blank for a single-part assessment)</label>
+    <textarea id="jobParts" placeholder="Section A&#10;Section B&#10;Section C"></textarea>
+    <p class="sync-help" style="margin-top:-4px;">You mark one part across all students, then the next. Renaming a part keeps its marks; removing a part deletes its marks.</p>
     <div class="modal-actions">
       <button class="btn btn-done" id="jobSaveBtn">Add job</button>
       <button class="btn" id="jobCancelBtn">Cancel</button>
@@ -490,36 +488,65 @@
 'use strict';
 
 // ---------------- State ----------------
-// v2 model: classes are persistent rosters; assessments are the markable jobs
-// attached to a class, each holding its own per-student marks.
-const KEY = 'markingConsole.v2';
+// Classes are persistent rosters; assessments are markable jobs attached to a
+// class. An assessment can optionally be split into parts; the unit of marking
+// is a cell (one student's one part). A single-part assessment uses one
+// implicit part, PART_ALL.
+const KEY = 'markingConsole.v3';
+const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
+const PART_ALL = '_all';
 
-const DEFAULT_MARK = () => ({ status: 'unmarked', tags: [], note: '', markedAt: null, satOn: '', updatedAt: '' });
+const newMark = () => ({ missing: false, satOn: '', updatedAt: '', parts: {} });   // per student
+const newCell = () => ({ done: false, tags: [], note: '', markedAt: null, updatedAt: '' });   // per student-part
 
 const blank = () => ({
   meta: { deviceId: uid() + uid(), updatedAt: '' },   // deviceId is per-browser; updatedAt tracks non-entity changes
   classes: [],          // {id, name, updatedAt, students:[{id, first, last, label, updatedAt}]}
-  assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, marks:{sid:{...,updatedAt}}}
+  assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, parts:[{id,name,updatedAt}], marks:{sid:mark}}
   tags: [],             // {id, name, updatedAt}
   tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/tags
-  ui: { currentClass: null, currentAssessment: null, currentStudent: null, view: 'dashboard', theme: 'dark' },
-  settings: { calibrateEvery: 0 }
+  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark' },
+  settings: {}
 });
 
 let S = load();
 
 function load() {
   try {
-    const v2 = localStorage.getItem(KEY);
-    if (v2) return normalize(JSON.parse(v2));
+    const v3 = localStorage.getItem(KEY);
+    if (v3) return normalize(JSON.parse(v3));
+    const v2 = localStorage.getItem(OLD2_KEY);
+    if (v2) return normalize(JSON.parse(v2));      // normalize upgrades flat v2 marks to part-based
     const v1 = localStorage.getItem(OLD_KEY);
     if (v1) return migrateV1(JSON.parse(v1));
   } catch (e) { console.warn('Load failed', e); }
   return blank();
 }
 
-// Fill in any missing keys so older or partial saved states never crash a render.
+// Convert an old flat mark ({status,tags,note,...}) into the part-based shape,
+// or tidy an already part-based mark. Idempotent, so it is safe to run on any
+// loaded or pulled data.
+function upgradeMark(m) {
+  if (!m || typeof m !== 'object') return newMark();
+  if (m.parts && typeof m.parts === 'object') {
+    const out = { missing: !!m.missing, satOn: m.satOn || '', updatedAt: m.updatedAt || '', parts: {} };
+    Object.keys(m.parts).forEach(pid => {
+      const c = m.parts[pid] || {};
+      out.parts[pid] = { done: !!c.done, tags: Array.isArray(c.tags) ? c.tags : [], note: c.note || '', markedAt: c.markedAt || null, updatedAt: c.updatedAt || '' };
+    });
+    return out;
+  }
+  return {
+    missing: m.status === 'missing',
+    satOn: m.satOn || '',
+    updatedAt: m.updatedAt || m.markedAt || '',
+    parts: { [PART_ALL]: { done: m.status === 'marked', tags: Array.isArray(m.tags) ? m.tags : [], note: m.note || '', markedAt: m.markedAt || null, updatedAt: m.updatedAt || m.markedAt || '' } }
+  };
+}
+
+// Fill in any missing keys so older or partial saved states never crash a
+// render, and upgrade marks to the part-based shape.
 function normalize(d) {
   const b = blank();
   d = d || {};
@@ -529,19 +556,20 @@ function normalize(d) {
   d.tombstones = (d.tombstones && typeof d.tombstones === 'object') ? d.tombstones : {};
   d.meta = Object.assign({ deviceId: '', updatedAt: '' }, d.meta || {});
   if (!d.meta.deviceId) d.meta.deviceId = uid() + uid();
-  // Backfill sync timestamps so older data merges predictably (real edits win).
   d.tags.forEach(t => { if (t.updatedAt == null) t.updatedAt = ''; });
   d.classes.forEach(c => {
     if (c.updatedAt == null) c.updatedAt = '';
     (c.students || []).forEach(s => { if (s.updatedAt == null) s.updatedAt = ''; });
   });
   d.assessments.forEach(a => {
+    if (!Array.isArray(a.parts)) a.parts = [];
+    a.parts.forEach(p => { if (p.updatedAt == null) p.updatedAt = ''; });
     if (!a.marks || typeof a.marks !== 'object') a.marks = {};
     if (a.updatedAt == null) a.updatedAt = a.createdAt || '';
-    Object.values(a.marks).forEach(m => { if (m.updatedAt == null) m.updatedAt = m.markedAt || ''; });
+    Object.keys(a.marks).forEach(sid => { a.marks[sid] = upgradeMark(a.marks[sid]); });
   });
   d.ui = Object.assign({}, b.ui, d.ui || {});
-  d.settings = Object.assign({}, b.settings, d.settings || {});
+  d.settings = {};   // calibration setting removed
   return d;
 }
 
@@ -552,7 +580,6 @@ function normalize(d) {
 function migrateV1(d) {
   const out = blank();
   out.tags = Array.isArray(d.tags) ? d.tags : [];
-  out.settings.calibrateEvery = (d.settings && d.settings.calibrateEvery) || 0;
   out.ui.theme = (d.ui && d.ui.theme) || 'dark';
   const due = (d.settings && d.settings.endDate) || '';
   (d.classes || []).forEach(oldC => {
@@ -585,11 +612,22 @@ const curStudent = () => {
   return c ? c.students.find(s => s.id === S.ui.currentStudent) || null : null;
 };
 
-// Read a student's mark for an assessment; returns a fresh default (not
-// persisted) when none exists yet, so reads are always safe.
-function markOf(a, sid) { return (a && a.marks[sid]) || DEFAULT_MARK(); }
-// Get the mark for writing, creating it on first touch.
-function ensureMark(a, sid) { if (!a.marks[sid]) a.marks[sid] = DEFAULT_MARK(); return a.marks[sid]; }
+// Read a student's mark; returns a fresh default (not persisted) when absent.
+function markOf(a, sid) { return (a && a.marks[sid]) || newMark(); }
+function ensureMark(a, sid) { if (!a.marks[sid]) a.marks[sid] = newMark(); return a.marks[sid]; }
+
+// Parts: an assessment with none behaves as one implicit part (PART_ALL).
+function partsOf(a) { return (a && a.parts && a.parts.length) ? a.parts : [{ id: PART_ALL, name: '' }]; }
+function isMultiPart(a) { return !!(a && a.parts && a.parts.length); }
+function cellOf(a, sid, pid) { const m = markOf(a, sid); return (m.parts && m.parts[pid]) || newCell(); }
+function ensureCell(a, sid, pid) { const m = ensureMark(a, sid); if (!m.parts[pid]) m.parts[pid] = newCell(); return m.parts[pid]; }
+// The part currently being marked (device-local), defaulting to the first.
+function curPart() {
+  const a = curAssessment(); if (!a) return PART_ALL;
+  const parts = partsOf(a);
+  if (S.ui.currentPart && parts.some(p => p.id === S.ui.currentPart)) return S.ui.currentPart;
+  return parts[0].id;
+}
 
 const tagName = tagId => (S.tags.find(t => t.id === tagId) || {}).name || '?';
 
@@ -606,36 +644,58 @@ function fmtDate(str) {
   return d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-// Per-assessment figures: the single source of truth for one job's numbers,
-// used by the header, dashboard and settings alike.
+// Per-assessment figures, now counted in cells (student × part). The single
+// source of truth for a job's numbers, used by the header, dashboard and
+// settings. Missing students contribute no cells. For a single-part
+// assessment a cell equals a paper, so these numbers match the old behaviour.
 function assessmentStats(a) {
   const cls = classOf(a);
   const students = cls ? cls.students : [];
-  const total = students.length;
-  let marked = 0, missing = 0, markedToday = 0;
+  const parts = partsOf(a);
+  const P = parts.length;
+  const today = todayStr();
+  let denom = 0, marked = 0, markedToday = 0, missing = 0;
   students.forEach(s => {
     const m = markOf(a, s.id);
-    if (m.status === 'marked') { marked++; if (m.markedAt && m.markedAt.slice(0, 10) === todayStr()) markedToday++; }
-    else if (m.status === 'missing') missing++;
+    if (m.missing) { missing++; return; }
+    denom += P;
+    parts.forEach(p => {
+      const c = cellOf(a, s.id, p.id);
+      if (c.done) { marked++; if (c.markedAt && c.markedAt.slice(0, 10) === today) markedToday++; }
+    });
   });
-  const denom = total - missing;
   const remaining = denom - marked;
   const pct = denom ? Math.round(100 * marked / denom) : 0;
   const dl = dueDaysLeft(a);
-  // Daily target: today's marked papers count toward today, so the number stays
-  // stable through the day instead of shrinking as you work.
+  // Today's marked cells count toward today, so the target stays stable.
   const dailyTarget = (dl && dl > 0) ? Math.ceil((remaining + markedToday) / dl) : null;
-  const complete = total > 0 && remaining === 0;
-  // A job whose sit date is still in the future has nothing to mark yet.
-  const upcoming = !!a.dateSat && a.dateSat > todayStr() && !complete;
-  return { a, cls, total, marked, missing, markedToday, denom, remaining, pct, dl, dailyTarget, complete, upcoming };
+  const complete = denom > 0 && remaining === 0;
+  const upcoming = !!a.dateSat && a.dateSat > today && !complete;
+  return { a, cls, parts: P, students: students.length, submitted: students.length - missing, marked, missing, markedToday, denom, remaining, pct, dl, dailyTarget, complete, upcoming };
 }
 
-// Count how many papers in one assessment carry a given tag.
+// Progress of a single part: cells done over submitting (non-missing) students.
+function partStats(a, pid) {
+  const cls = classOf(a);
+  const students = cls ? cls.students : [];
+  let done = 0, denom = 0;
+  students.forEach(s => { if (markOf(a, s.id).missing) return; denom++; if (cellOf(a, s.id, pid).done) done++; });
+  return { done, denom };
+}
+
+// Tag frequency within one part (drives the sidebar while marking that part).
+function tagCountInPart(a, pid, tagId) {
+  const cls = classOf(a);
+  if (!cls) return 0;
+  return cls.students.reduce((n, s) => n + (cellOf(a, s.id, pid).tags.includes(tagId) ? 1 : 0), 0);
+}
+// Tag frequency across every cell of the assessment (drives the tag summary).
 function tagCountInAssessment(a, tagId) {
   const cls = classOf(a);
   if (!cls) return 0;
-  return cls.students.reduce((n, s) => n + (markOf(a, s.id).tags.includes(tagId) ? 1 : 0), 0);
+  let n = 0;
+  cls.students.forEach(s => partsOf(a).forEach(p => { if (cellOf(a, s.id, p.id).tags.includes(tagId)) n++; }));
+  return n;
 }
 
 // ---------------- Label generation ----------------
@@ -675,7 +735,7 @@ function render() {
   const light = S.ui.theme === 'light';
   document.body.classList.toggle('theme-light', light);
   document.getElementById('themeBtn').textContent = light ? '☾ Night' : '☀ Light';
-  renderHeader(); renderDashboard(); renderChips(); renderRoster(); renderPaper(); renderTags();
+  renderHeader(); renderDashboard(); renderChips(); renderPartBar(); renderRoster(); renderPaper(); renderTags();
   refreshSyncUI();
 }
 
@@ -802,10 +862,37 @@ function openAssessment(aid) {
   if (!a) return;
   S.ui.currentAssessment = aid;
   S.ui.currentClass = a.classId;
+  const pid = partsOf(a)[0].id;
+  S.ui.currentPart = pid;
   const cls = classOf(a);
-  const first = cls ? cls.students.find(s => markOf(a, s.id).status === 'unmarked') : null;
-  S.ui.currentStudent = first ? first.id : (cls && cls.students[0] ? cls.students[0].id : null);
+  const first = cls ? (cls.students.find(s => !markOf(a, s.id).missing && !cellOf(a, s.id, pid).done) || cls.students[0]) : null;
+  S.ui.currentStudent = first ? first.id : null;
   S.ui.view = 'workspace';
+  save(); render();
+}
+
+// Part tabs shown above the paper panel for multi-part assessments.
+function renderPartBar() {
+  const bar = document.getElementById('partBar');
+  if (!bar) return;
+  const a = curAssessment();
+  if (!a || !isMultiPart(a)) { bar.innerHTML = ''; bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  const cur = curPart();
+  bar.innerHTML = a.parts.map(p => {
+    const ps = partStats(a, p.id);
+    const full = ps.denom > 0 && ps.done === ps.denom;
+    return `<button class="part-tab${p.id === cur ? ' active' : ''}${full ? ' full' : ''}" onclick="selectPart('${p.id}')">${esc(p.name || 'Part')}<span class="part-mini">${ps.done}/${ps.denom}</span></button>`;
+  }).join('');
+}
+function selectPart(pid) {
+  S.ui.currentPart = pid;
+  const a = curAssessment(); const c = curClass();
+  if (c) {
+    const first = c.students.find(s => !markOf(a, s.id).missing && !cellOf(a, s.id, pid).done)
+      || c.students.find(s => !markOf(a, s.id).missing) || c.students[0];
+    S.ui.currentStudent = first ? first.id : null;
+  }
   save(); render();
 }
 
@@ -840,16 +927,19 @@ function renderRoster() {
   const a = curAssessment();
   const c = curClass();
   if (!a || !c) { cp.textContent = ''; return; }
-  const st = assessmentStats(a);
-  cp.textContent = `${st.marked}/${c.students.length}`;
+  const pid = curPart();
+  const ps = partStats(a, pid);
+  cp.textContent = `${ps.done}/${ps.denom}`;
   c.students.forEach(s => {
     const m = markOf(a, s.id);
+    const cell = cellOf(a, s.id, pid);
+    const status = m.missing ? 'missing' : (cell.done ? 'marked' : 'unmarked');
     const row = document.createElement('div');
-    row.className = 'stu-row ' + m.status + (s.id === S.ui.currentStudent ? ' current' : '');
+    row.className = 'stu-row ' + status + (s.id === S.ui.currentStudent ? ' current' : '');
     row.innerHTML = `
       <span class="stu-status"><svg viewBox="0 0 12 12"><path d="M2 6.5 L5 9.5 L10 3"/></svg></span>
       <span class="stu-label">${esc(s.label)}</span>
-      <span class="stu-tagcount">${m.tags.length ? m.tags.length + ' tag' + (m.tags.length > 1 ? 's' : '') : ''}</span>`;
+      <span class="stu-tagcount">${cell.tags.length ? cell.tags.length + ' tag' + (cell.tags.length > 1 ? 's' : '') : ''}</span>`;
     row.onclick = () => { S.ui.currentStudent = s.id; save(); render(); };
     holder.appendChild(row);
   });
@@ -876,21 +966,49 @@ function renderPaper() {
     return;
   }
   const m = ensureMark(a, s.id);
+  const pid = curPart();
+  const multi = isMultiPart(a);
+  const partName = multi ? ((partsOf(a).find(p => p.id === pid) || {}).name || 'Part') : '';
   const idx = c.students.indexOf(s) + 1;
-  const tagsHtml = m.tags.length
-    ? m.tags.map(tid => `<span class="ptag">${esc(tagName(tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
+  const posLine = `PAPER ${idx} OF ${c.students.length} · ${esc(a.name)}${multi ? ` · ${esc(partName)}` : ''}`;
+  const satRow = `<div class="paper-sat">Sat on <input type="date" id="satInput" value="${esc(m.satOn || a.dateSat || '')}">
+      <span class="paper-sat-hint">${(m.satOn && a.dateSat && m.satOn !== a.dateSat) ? 'later sitting' : ''}</span></div>`;
+
+  if (m.missing) {
+    holder.innerHTML = `
+      <div class="paper-pos">${posLine}</div>
+      <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
+      <div class="paper-empty-tags" style="align-self:flex-start;">Marked not submitted; excluded from progress.</div>
+      ${satRow}
+      <div class="paper-actions">
+        <button class="btn btn-missing" onclick="toggleMissing()">Un-mark missing</button>
+      </div>
+      <div class="nav-row">
+        <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
+        <button class="btn btn-nav" onclick="step(1)">Next →</button>
+        <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
+      </div>`;
+    document.getElementById('satInput').addEventListener('change', e => {
+      const mm = ensureMark(a, s.id); mm.satOn = e.target.value; mm.updatedAt = nowISO(); save(); renderPaper();
+    });
+    return;
+  }
+
+  const cell = ensureCell(a, s.id, pid);
+  const tagsHtml = cell.tags.length
+    ? cell.tags.map(tid => `<span class="ptag">${esc(tagName(tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
     : '<span class="paper-empty-tags">Click tags on the right as you spot mistakes.</span>';
+  const notePlaceholder = multi ? `Optional note on ${esc(partName)} (goes into the feedback prompt)` : 'Optional note for this paper (goes into the feedback prompt)';
   holder.innerHTML = `
-    <div class="paper-pos">PAPER ${idx} OF ${c.students.length} · ${esc(a.name)}</div>
+    <div class="paper-pos">${posLine}</div>
     <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
     <div class="paper-tags">${tagsHtml}</div>
-    <textarea id="noteInput" placeholder="Optional note for this paper (goes into the feedback prompt)">${esc(m.note || '')}</textarea>
-    <div class="paper-sat">Sat on <input type="date" id="satInput" value="${esc(m.satOn || a.dateSat || '')}">
-      <span class="paper-sat-hint">${(m.satOn && a.dateSat && m.satOn !== a.dateSat) ? 'later sitting' : ''}</span></div>
+    <textarea id="noteInput" placeholder="${notePlaceholder}">${esc(cell.note || '')}</textarea>
+    ${satRow}
     <div class="paper-actions">
-      <button class="btn btn-done" onclick="markDone()">✓ Mark done</button>
+      <button class="btn btn-done" onclick="markDone()">✓ ${multi ? 'Mark part done' : 'Mark done'}</button>
       <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
-      <button class="btn btn-missing" onclick="toggleMissing()">${m.status === 'missing' ? 'Un-mark missing' : 'Not submitted'}</button>
+      <button class="btn btn-missing" onclick="toggleMissing()">Not submitted</button>
     </div>
     <div class="nav-row">
       <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
@@ -898,7 +1016,7 @@ function renderPaper() {
       <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
-    const mm = ensureMark(a, s.id); mm.note = e.target.value; mm.updatedAt = nowISO(); save(); renderRoster();
+    const cc = ensureCell(a, s.id, pid); cc.note = e.target.value; cc.updatedAt = nowISO(); save(); renderRoster();
   });
   document.getElementById('satInput').addEventListener('change', e => {
     const mm = ensureMark(a, s.id); mm.satOn = e.target.value; mm.updatedAt = nowISO(); save(); renderPaper();
@@ -910,18 +1028,19 @@ function renderTags() {
   list.innerHTML = '';
   const a = curAssessment();
   const s = curStudent();
-  const m = (a && s) ? markOf(a, s.id) : null;
+  const pid = curPart();
+  const cell = (a && s) ? cellOf(a, s.id, pid) : null;
   if (!S.tags.length) {
-    list.innerHTML = '<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency within this assessment so common mistakes rise to the top.</div>';
+    list.innerHTML = '<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency within the part you are marking so common mistakes rise to the top.</div>';
     document.getElementById('tagTotal').textContent = '';
     return;
   }
-  const counts = S.tags.map(t => ({ t, n: a ? tagCountInAssessment(a, t.id) : 0 }));
+  const counts = S.tags.map(t => ({ t, n: a ? tagCountInPart(a, pid, t.id) : 0 }));
   counts.sort((x, y) => y.n - x.n || x.t.name.localeCompare(y.t.name));
   const max = Math.max(1, ...counts.map(x => x.n));
   counts.forEach(({ t, n }) => {
     const row = document.createElement('div');
-    row.className = 'tag-row' + (m && m.tags.includes(t.id) ? ' on-paper' : '');
+    row.className = 'tag-row' + (cell && cell.tags.includes(t.id) ? ' on-paper' : '');
     row.innerHTML = `<span class="tag-name">${esc(t.name)}</span><span class="tag-count">×${n}</span>`;
     row.onclick = () => toggleTagOnPaper(t.id);
     list.appendChild(row);
@@ -940,19 +1059,19 @@ function renderTags() {
 function toggleTagOnPaper(tagId) {
   const a = curAssessment(); const s = curStudent();
   if (!a || !s) { toast('Select a paper first'); return; }
-  const m = ensureMark(a, s.id);
-  const i = m.tags.indexOf(tagId);
-  if (i >= 0) m.tags.splice(i, 1); else m.tags.push(tagId);
-  m.updatedAt = nowISO();
+  const cell = ensureCell(a, s.id, curPart());
+  const i = cell.tags.indexOf(tagId);
+  if (i >= 0) cell.tags.splice(i, 1); else cell.tags.push(tagId);
+  cell.updatedAt = nowISO();
   save(); renderRoster(); renderPaper(); renderTags();
 }
 function removeTagFromPaper(tagId) {
   const a = curAssessment(); const s = curStudent();
   if (!a || !s) return;
-  const m = ensureMark(a, s.id);
-  const i = m.tags.indexOf(tagId);
-  if (i >= 0) m.tags.splice(i, 1);
-  m.updatedAt = nowISO();
+  const cell = ensureCell(a, s.id, curPart());
+  const i = cell.tags.indexOf(tagId);
+  if (i >= 0) cell.tags.splice(i, 1);
+  cell.updatedAt = nowISO();
   save(); renderRoster(); renderPaper(); renderTags();
 }
 function addTag() {
@@ -963,7 +1082,7 @@ function addTag() {
   const t = { id: uid(), name, updatedAt: nowISO() };
   S.tags.push(t);
   const a = curAssessment(); const s = curStudent();
-  if (a && s) { const m = ensureMark(a, s.id); m.tags.push(t.id); m.updatedAt = nowISO(); }   // adding a tag mid-paper almost always means you just saw it
+  if (a && s && !markOf(a, s.id).missing) { const cell = ensureCell(a, s.id, curPart()); cell.tags.push(t.id); cell.updatedAt = nowISO(); }   // adding a tag mid-paper almost always means you just saw it
   input.value = '';
   save(); render();
 }
@@ -971,10 +1090,11 @@ function addTag() {
 function markDone() {
   const a = curAssessment(); const c = curClass(); const s = curStudent();
   if (!a || !c || !s) return;
-  const m = ensureMark(a, s.id);
-  m.status = 'marked';
-  m.markedAt = nowISO();
-  m.updatedAt = nowISO();
+  if (markOf(a, s.id).missing) return;
+  const cell = ensureCell(a, s.id, curPart());
+  cell.done = true;
+  cell.markedAt = nowISO();
+  cell.updatedAt = nowISO();
   save();
   render();
   // tick animation on the row
@@ -984,7 +1104,6 @@ function markDone() {
     rows[idx].classList.add('just-marked');
     setTimeout(() => rows[idx] && rows[idx].classList.remove('just-marked'), 950);
   }
-  maybeCalibrate(a);
   setTimeout(gotoNextUnmarked, 350);
 }
 
@@ -992,8 +1111,7 @@ function toggleMissing() {
   const a = curAssessment(); const s = curStudent();
   if (!a || !s) return;
   const m = ensureMark(a, s.id);
-  m.status = m.status === 'missing' ? 'unmarked' : 'missing';
-  if (m.status === 'missing') m.markedAt = null;
+  m.missing = !m.missing;
   m.updatedAt = nowISO();
   save(); render();
 }
@@ -1006,47 +1124,56 @@ function step(dir) {
   S.ui.currentStudent = c.students[i].id;
   save(); render();
 }
+// Next unmarked student within the current part; when the part is finished,
+// jump to the next part that still has unmarked papers.
 function gotoNextUnmarked() {
   const a = curAssessment(); const c = curClass();
   if (!a || !c) return;
-  const start = Math.max(0, c.students.findIndex(s => s.id === S.ui.currentStudent));
+  const pid = curPart();
   const n = c.students.length;
+  const start = Math.max(0, c.students.findIndex(s => s.id === S.ui.currentStudent));
   for (let k = 1; k <= n; k++) {
     const s = c.students[(start + k) % n];
-    if (markOf(a, s.id).status === 'unmarked') { S.ui.currentStudent = s.id; save(); render(); return; }
+    if (!markOf(a, s.id).missing && !cellOf(a, s.id, pid).done) { S.ui.currentStudent = s.id; save(); render(); return; }
   }
-  // none left unmarked
+  // current part done: move to the next part with unmarked papers
+  const parts = partsOf(a);
+  const ci = parts.findIndex(p => p.id === pid);
+  for (let k = 1; k <= parts.length; k++) {
+    const p = parts[(ci + k) % parts.length];
+    const firstUn = c.students.find(s => !markOf(a, s.id).missing && !cellOf(a, s.id, p.id).done);
+    if (firstUn) {
+      S.ui.currentPart = p.id; S.ui.currentStudent = firstUn.id; save(); render();
+      if (isMultiPart(a)) toast(`On to ${p.name || 'next part'}`);
+      return;
+    }
+  }
+  // everything done
   S.ui.currentStudent = null; save(); render();
-  toast('All papers in this assessment are done 🎉');
-}
-
-// ---------------- Calibration ----------------
-function maybeCalibrate(a) {
-  const every = S.settings.calibrateEvery;
-  if (!every) return;
-  const c = classOf(a);
-  if (!c) return;
-  const marked = c.students.map(s => ({ s, m: markOf(a, s.id) })).filter(x => x.m.status === 'marked');
-  if (marked.length && marked.length % every === 0) {
-    const first = marked.slice().sort((x, y) => (x.m.markedAt || '').localeCompare(y.m.markedAt || ''))[0];
-    const holder = document.getElementById('calibHolder');
-    holder.innerHTML = `<div class="calib-banner">
-      <span>Calibration check: re-read your first marked paper (${esc(first.s.label)}) and confirm you'd give it the same mark.</span>
-      <button onclick="this.parentElement.remove()">×</button></div>`;
-  }
+  toast('Every part of this assessment is done 🎉');
 }
 
 // ---------------- Exports ----------------
 function copyPrompt() {
   const a = curAssessment(); const c = curClass(); const s = curStudent();
   if (!a || !c || !s) return;
-  const m = markOf(a, s.id);
-  const lines = m.tags.map(tid => '- ' + tagName(tid));
+  const multi = isMultiPart(a);
   let txt = `Write a feedback comment for ${s.first}, a student in my ${c.name} class, on ${a.name}.\n\n`;
-  txt += lines.length
-    ? `Observed issues from my marking:\n${lines.join('\n')}\n`
-    : `No specific recurring issues were tagged; the work was broadly sound.\n`;
-  if (m.note && m.note.trim()) txt += `\nMarker's note: ${m.note.trim()}\n`;
+  // Gather this student's observations across every part.
+  const blocks = partsOf(a).map(p => ({ name: p.name, cell: cellOf(a, s.id, p.id) }))
+    .map(b => ({ name: b.name, tags: b.cell.tags.map(tid => tagName(tid)), note: (b.cell.note || '').trim() }))
+    .filter(b => b.tags.length || b.note);
+  if (blocks.length) {
+    txt += `Observed issues from my marking:\n`;
+    blocks.forEach(b => {
+      if (multi && b.name) txt += `${b.name}:\n`;
+      const indent = (multi && b.name) ? '  ' : '';
+      b.tags.forEach(t => { txt += `${indent}- ${t}\n`; });
+      if (b.note) txt += `${indent}note: ${b.note}\n`;
+    });
+  } else {
+    txt += `No specific recurring issues were tagged; the work was broadly sound.\n`;
+  }
   txt += `\nRequirements: address the student directly by first name; encouraging but honest; specific and actionable; around 80 words; plain readable prose; do not invent issues beyond those listed.`;
   clip(txt, 'Feedback prompt copied');
 }
@@ -1056,11 +1183,11 @@ function copyAssessmentSummary() {
   if (!a || !c) { toast('Open a marking job first'); return; }
   const st = assessmentStats(a);
   const freq = {};
-  c.students.forEach(s => markOf(a, s.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
+  c.students.forEach(s => partsOf(a).forEach(p => cellOf(a, s.id, p.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; })));
   const rows = Object.entries(freq)
     .sort((x, y) => y[1] - x[1])
     .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(tid)}`);
-  let txt = `${c.name} — ${a.name} — tag summary (${st.marked}/${c.students.length} marked, ${st.missing} missing)\n`;
+  let txt = `${c.name} — ${a.name} — tag summary (${st.marked}/${st.denom} cells marked, ${st.missing} not submitted)\n`;
   txt += rows.length ? rows.join('\n') : '(no tags logged)';
   clip(txt, 'Assessment summary copied');
 }
@@ -1073,27 +1200,42 @@ function copyAssessmentData() {
   const a = curAssessment(); const c = curClass();
   if (!a || !c) { toast('Open a marking job first'); return; }
   const st = assessmentStats(a);
+  const multi = isMultiPart(a);
+  const parts = partsOf(a);
   const L = [];
   L.push(`${c.name} — ${a.name}`);
   const dates = [];
   if (a.dateSat) dates.push(`sat ${a.dateSat}`);
   if (a.dueDate) dates.push(`due ${a.dueDate}`);
-  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${c.students.length} marked, ${st.missing} missing.`);
+  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${st.denom} cells marked across ${st.submitted} papers, ${st.missing} not submitted.`);
+  if (multi) L.push(`Parts: ${parts.map(p => p.name || 'Part').join(', ')}.`);
   L.push('');
   L.push('Papers:');
   c.students.forEach((s, i) => {
     const m = markOf(a, s.id);
-    let line = `- Paper ${i + 1} [${m.status}]`;
-    if (m.satOn && a.dateSat && m.satOn !== a.dateSat) line += ` (sat ${m.satOn})`;
-    const tags = m.tags.map(tid => tagName(tid));
-    line += tags.length ? `: ${tags.join('; ')}` : ': (no tags)';
-    if (m.note && m.note.trim()) line += ` — note: ${m.note.trim()}`;
-    L.push(line);
+    if (m.missing) { L.push(`- Paper ${i + 1} [not submitted]`); return; }
+    const done = parts.filter(p => cellOf(a, s.id, p.id).done).length;
+    let head = `- Paper ${i + 1} [${done}/${parts.length}${multi ? ' parts' : ''} marked]`;
+    if (m.satOn && a.dateSat && m.satOn !== a.dateSat) head += ` (sat ${m.satOn})`;
+    L.push(head);
+    parts.forEach(p => {
+      const cell = cellOf(a, s.id, p.id);
+      const tags = cell.tags.map(tid => tagName(tid));
+      if (!multi) {
+        let l = `    ${tags.length ? tags.join('; ') : '(no tags)'}`;
+        if (cell.note && cell.note.trim()) l += ` — note: ${cell.note.trim()}`;
+        L.push(l);
+      } else {
+        let l = `    ${p.name || 'Part'}: ${cell.done ? '' : '[unmarked] '}${tags.length ? tags.join('; ') : '(no tags)'}`;
+        if (cell.note && cell.note.trim()) l += ` — note: ${cell.note.trim()}`;
+        L.push(l);
+      }
+    });
   });
   const freq = {};
-  c.students.forEach(s => markOf(a, s.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; }));
+  c.students.forEach(s => parts.forEach(p => cellOf(a, s.id, p.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; })));
   const rows = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(([tid, n]) => `  ${n} × ${tagName(tid)}`);
-  if (rows.length) { L.push(''); L.push('Tag totals:'); rows.forEach(r => L.push(r)); }
+  if (rows.length) { L.push(''); L.push('Tag totals (across all parts):'); rows.forEach(r => L.push(r)); }
   clip(L.join('\n'), 'Assessment data copied');
 }
 
@@ -1111,7 +1253,6 @@ function fallbackClip(text, msg) {
 
 // ---------------- Settings ----------------
 function openSettings() {
-  document.getElementById('calibSelect').value = String(S.settings.calibrateEvery || 0);
   const cfg = loadSync();
   document.getElementById('syncToken').value = cfg.token || '';
   document.getElementById('syncGist').value = cfg.gistId || '';
@@ -1181,18 +1322,20 @@ function openJobModal(editId) {
   const nameEl = document.getElementById('jobName');
   const satEl = document.getElementById('jobSat');
   const dueEl = document.getElementById('jobDue');
+  const partsEl = document.getElementById('jobParts');
   if (editingJobId) {
     const a = S.assessments.find(x => x.id === editingJobId);
     if (!a) { editingJobId = null; return; }
     sel.value = a.classId; sel.disabled = true;           // class is fixed once a job exists
     nameEl.value = a.name; satEl.value = a.dateSat || ''; dueEl.value = a.dueDate || '';
+    partsEl.value = (a.parts || []).map(p => p.name).join('\n');
     document.getElementById('jobModalTitle').textContent = 'Edit marking job';
     document.getElementById('jobSaveBtn').textContent = 'Save changes';
   } else {
     if (!S.classes.length) { toast('Add a class in Set up first'); return; }
     sel.disabled = false;
     if (S.classes[0]) sel.value = S.classes[0].id;
-    nameEl.value = ''; satEl.value = ''; dueEl.value = '';
+    nameEl.value = ''; satEl.value = ''; dueEl.value = ''; partsEl.value = '';
     document.getElementById('jobModalTitle').textContent = 'New marking job';
     document.getElementById('jobSaveBtn').textContent = 'Add job';
   }
@@ -1203,25 +1346,61 @@ function closeJobModal() {
   document.getElementById('jobOverlay').classList.remove('open');
   editingJobId = null;
 }
+function parsePartNames() {
+  return document.getElementById('jobParts').value.split('\n').map(l => l.trim()).filter(Boolean);
+}
+// Rebuild an assessment's parts list from the edited names, reusing existing
+// part ids (so their marks survive): match by name first, then by position for
+// renames/reorders. Cells of removed parts are dropped.
+function reconcileParts(a, names) {
+  let oldParts = (a.parts && a.parts.length) ? a.parts.slice()
+    : (Object.values(a.marks || {}).some(m => m.parts && m.parts[PART_ALL]) ? [{ id: PART_ALL, name: '' }] : []);
+  if (!names.length) {
+    // Collapse to a single implicit part; keep the first old part's cells.
+    const firstId = oldParts[0] && oldParts[0].id;
+    Object.values(a.marks || {}).forEach(m => {
+      const keep = firstId && m.parts ? m.parts[firstId] : null;
+      m.parts = keep ? { [PART_ALL]: keep } : {};
+    });
+    a.parts = [];
+    return;
+  }
+  const used = new Set();
+  const result = names.map(name => {
+    const byName = oldParts.find(p => !used.has(p.id) && (p.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (byName) { used.add(byName.id); return { id: byName.id, name, updatedAt: nowISO() }; }
+    return { id: null, name };
+  });
+  const remaining = oldParts.filter(p => !used.has(p.id));
+  let ri = 0;
+  result.forEach(r => { if (!r.id) { r.id = (ri < remaining.length) ? remaining[ri++].id : uid(); used.add(r.id); r.updatedAt = nowISO(); } });
+  const keptIds = new Set(result.map(r => r.id));
+  const removed = oldParts.filter(p => !keptIds.has(p.id)).map(p => p.id);
+  if (removed.length) Object.values(a.marks || {}).forEach(m => { if (m.parts) removed.forEach(id => delete m.parts[id]); });
+  a.parts = result;
+}
 function saveJob() {
   const name = document.getElementById('jobName').value.trim();
   const sat = document.getElementById('jobSat').value;
   const due = document.getElementById('jobDue').value;
+  const names = parsePartNames();
   if (!name) { toast('Assessment needs a name'); return; }
   if (editingJobId) {
     const a = S.assessments.find(x => x.id === editingJobId);
     if (!a) { closeJobModal(); return; }
     a.name = name; a.dateSat = sat || ''; a.dueDate = due || ''; a.updatedAt = nowISO();
+    reconcileParts(a, names);
     save(); closeJobModal(); render();
     toast('Job updated');
   } else {
     const classId = document.getElementById('jobClass').value;
     const cls = S.classes.find(c => c.id === classId);
     if (!cls) { toast('Pick a class'); return; }
-    const marks = {};
-    cls.students.forEach(s => { marks[s.id] = DEFAULT_MARK(); });
     const now = nowISO();
-    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, marks };
+    const marks = {};
+    cls.students.forEach(s => { marks[s.id] = newMark(); });
+    const parts = names.map(n => ({ id: uid(), name: n, updatedAt: now }));
+    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, parts, marks };
     S.assessments.push(a);
     save(); closeJobModal(); render();
     toast(`${name} added to ${cls.name}`);
@@ -1299,7 +1478,11 @@ function dataTs() {
   const bump = t => { if (t && t > mx) mx = t; };
   S.tags.forEach(t => bump(t.updatedAt));
   S.classes.forEach(c => { bump(c.updatedAt); (c.students || []).forEach(s => bump(s.updatedAt)); });
-  S.assessments.forEach(a => { bump(a.updatedAt); Object.values(a.marks || {}).forEach(m => bump(m.updatedAt)); });
+  S.assessments.forEach(a => {
+    bump(a.updatedAt);
+    (a.parts || []).forEach(p => bump(p.updatedAt));
+    Object.values(a.marks || {}).forEach(m => { bump(m.updatedAt); Object.values(m.parts || {}).forEach(c => bump(c.updatedAt)); });
+  });
   Object.values(S.tombstones || {}).forEach(bump);
   return mx;
 }
@@ -1355,12 +1538,21 @@ function mergeDocs(a, b) {
     return Object.assign({}, base, { students: order });
   });
 
+  const mergeMark = (mx, my) => {
+    const mb = (my.updatedAt || '') > (mx.updatedAt || '') ? my : mx;   // student-level fields
+    const parts = {};
+    new Set([...Object.keys(mx.parts || {}), ...Object.keys(my.parts || {})]).forEach(pid => {
+      const cx = mx.parts && mx.parts[pid], cy = my.parts && my.parts[pid];
+      parts[pid] = (cx && cy) ? ((cy.updatedAt || '') > (cx.updatedAt || '') ? cy : cx) : (cx || cy);
+    });
+    return { missing: mb.missing, satOn: mb.satOn, updatedAt: mb.updatedAt, parts };
+  };
   const assessments = mergeById(a.assessments, b.assessments, (x, y) => {
-    const base = newer(x, y);
+    const base = newer(x, y);   // name, dates and the parts definition follow the newer edit
     const marks = {};
     new Set([...Object.keys(x.marks || {}), ...Object.keys(y.marks || {})]).forEach(sid => {
       const mx = x.marks && x.marks[sid], my = y.marks && y.marks[sid];
-      marks[sid] = (mx && my) ? ((my.updatedAt || '') > (mx.updatedAt || '') ? my : mx) : (mx || my);
+      marks[sid] = (mx && my) ? mergeMark(mx, my) : (mx || my);
     });
     return Object.assign({}, base, { marks });
   });
@@ -1397,6 +1589,17 @@ function canonicalDoc(doc) {
 }
 function docString(doc) { return canonicalJSON(canonicalDoc(doc)); }
 
+// Bring a pulled document up to the current shape (parts + part-based marks),
+// so a gist last written by an older version still merges cleanly.
+function upgradeDoc(doc) {
+  (doc.assessments || []).forEach(a => {
+    if (!Array.isArray(a.parts)) a.parts = [];
+    a.marks = a.marks || {};
+    Object.keys(a.marks).forEach(sid => { a.marks[sid] = upgradeMark(a.marks[sid]); });
+  });
+  return doc;
+}
+
 function ghHeaders(token) { return { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' }; }
 async function gistGet(id, token) {
   const r = await fetch('https://api.github.com/gists/' + id, { headers: ghHeaders(token) });
@@ -1430,6 +1633,7 @@ async function syncNow(interactive) {
     if (gistId) {
       remoteDoc = await gistGet(gistId, cfg.token);
       if (remoteDoc === null) { remoteDoc = localDoc; mustPush = true; }   // gist exists but our file is missing
+      else remoteDoc = upgradeDoc(remoteDoc);                              // handle a gist written by an older version
     } else {
       const created = await gistCreate(cfg.token, localDoc);
       gistId = created.id; remoteDoc = localDoc;                           // create() already wrote it
@@ -1509,13 +1713,7 @@ document.getElementById('settingsBtn').onclick = openSettings;
 document.getElementById('homeBtn').onclick = goDashboard;
 document.getElementById('themeBtn').onclick = toggleTheme;
 document.getElementById('hdrTitle').onclick = () => { if (S.ui.view === 'workspace') goDashboard(); };
-document.getElementById('closeSettingsBtn').onclick = () => {
-  const prev = S.settings.calibrateEvery || 0;
-  const next = parseInt(document.getElementById('calibSelect').value, 10) || 0;
-  S.settings.calibrateEvery = next;
-  if (next !== prev) S.meta.updatedAt = nowISO();   // settings are shared, so mark for sync
-  save(); closeSettings();
-};
+document.getElementById('closeSettingsBtn').onclick = () => { closeSettings(); };
 document.getElementById('syncBtn').onclick = () => syncNow(true);
 document.getElementById('syncSaveBtn').onclick = saveSyncConfig;
 document.getElementById('syncNowBtn').onclick = () => syncNow(true);

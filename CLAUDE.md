@@ -43,31 +43,39 @@ Everything is in `marking-console.html`: CSS in `<style>`, app in one
 `<script>` block, vanilla JS, no modules.
 
 - **State**: single object `S`, persisted to `localStorage` under key
-  `markingConsole.v2` on every mutation via `save()`. `load()` reads v2, and
-  if absent falls back to the old `markingConsole.v1` and converts it via
-  `migrateV1()` (the v1 record is left in place as a safety net, not deleted).
-  `normalize()` backfills any missing keys so partial states never crash.
+  `markingConsole.v3` on every mutation via `save()`. `load()` reads v3, else
+  the old `markingConsole.v2` (flat marks, upgraded on read), else
+  `markingConsole.v1` via `migrateV1()`. `normalize()` backfills missing keys
+  and, via `upgradeMark()`, converts old flat marks to the part-based shape;
+  older records are left in place as a safety net.
 - **Two-layer model**: a **class** is a persistent roster; an **assessment**
-  is a markable job attached to a class, holding that job's per-student marks
-  in a `marks` map keyed by student id. A class carries no marking state.
+  is a markable job attached to a class. An assessment can optionally be split
+  into **parts**; the unit of marking is a **cell** (one student's one part).
+  With no parts it uses one implicit part `PART_ALL`, so single-part
+  assessments behave exactly as a whole-paper mark. A class carries no marking
+  state.
 - **Views**: `ui.view` toggles between the `dashboard` (landing) and the
   `workspace` (marking). Forced to `dashboard` on every launch. Body classes
   `view-dashboard` / `view-workspace` drive which `<main>` shows.
-- **Two modals**: the Set up modal (`#settingsOverlay`) is class setup only,
-  plus the rare calibration and backup/reset config; it never touches jobs.
-  Marking jobs are created and edited from the dashboard via the job modal
-  (`#jobOverlay`, `openJobModal(editId?)` / `saveJob()`), and deleted from a
-  card control (`deleteAssessment`). On edit the class is fixed.
+- **Two modals**: the Set up modal (`#settingsOverlay`) is class setup plus the
+  rare backup/reset and sync config; it never touches jobs. Marking jobs
+  (including their parts) are created and edited from the dashboard via the job
+  modal (`#jobOverlay`, `openJobModal(editId?)` / `saveJob()`), and deleted
+  from a card control (`deleteAssessment`). On edit the class is fixed;
+  `reconcileParts` preserves a part's cells across renames/reorders.
 - **Rendering**: full re-render per region (`renderHeader`, `renderDashboard`,
-  `renderChips`, `renderRoster`, `renderPaper`, `renderTags`), all called by
-  `render()`. No virtual DOM, no diffing; the data is small enough that this
-  is fine.
-- **Per-assessment figures are derived** via `assessmentStats(a)`: the single
-  source of truth for a job's marked/remaining/missing/target numbers, used by
-  the header, dashboard, and settings. Tag counts are derived too
-  (`tagCountInAssessment`); do not introduce a stored counter.
-- **Marks accessors**: `markOf(a, sid)` reads (returns a fresh default when
-  absent, not persisted); `ensureMark(a, sid)` creates on first write.
+  `renderChips`, `renderPartBar`, `renderRoster`, `renderPaper`, `renderTags`),
+  all called by `render()`. No virtual DOM, no diffing; the data is small
+  enough that this is fine.
+- **Per-assessment figures are derived** via `assessmentStats(a)`, counted in
+  cells (student × part, missing students excluded): the single source of truth
+  for a job's marked/remaining/target numbers. `partStats(a, pid)` does the
+  same for one part. Tag counts are derived (`tagCountInPart`,
+  `tagCountInAssessment`); do not introduce a stored counter.
+- **Accessors**: `markOf`/`ensureMark` for a student's mark; `cellOf`/
+  `ensureCell` for a student-part cell; `partsOf(a)` returns the real parts or
+  the implicit single part; `curPart()` is the device-local part being marked.
+  Read accessors return fresh defaults (not persisted) when absent.
 
 ### Data model
 
@@ -83,27 +91,35 @@ S = {
     dateSat,                 // '' or 'YYYY-MM-DD'; a future date marks the job "upcoming"
     dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
     createdAt, updatedAt,    // ISO strings
+    parts: [{ id, name, updatedAt }],   // [] means one implicit part (PART_ALL)
     marks: {                 // keyed by student id
       [studentId]: {
-        status,              // 'unmarked' | 'marked' | 'missing'
-        tags: [tagId, ...],  // mistakes observed on this paper
-        note,                // free text, included in feedback prompt
-        markedAt,            // ISO string or null; drives "marked today"
+        missing,             // bool; non-submission excludes all this student's cells
         satOn,               // '' or 'YYYY-MM-DD'; per-student sit override (default = dateSat)
-        updatedAt            // ISO string; drives sync merge (newer wins per paper)
+        updatedAt,           // ISO; student-level fields merge by this
+        parts: {             // keyed by part id; one cell per part
+          [partId]: {
+            done,            // bool
+            tags: [tagId, ...],  // mistakes observed on this part
+            note,            // free text
+            markedAt,        // ISO or null; drives "marked today"
+            updatedAt        // ISO; drives sync merge (newer wins per cell)
+          }
+        }
       }
     }
   }],
   tags: [{ id, name, updatedAt }],   // global tag library, shared across everything
   tombstones: { [id]: deletedAtISO },// deleted class/assessment/tag ids, so a merge cannot resurrect them
-  ui: { currentClass, currentAssessment, currentStudent, view, theme },  // device-local; NOT synced
-  settings: { calibrateEvery }   // calibrateEvery: 0 = off
+  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme },  // device-local; NOT synced
+  settings: {}   // currently unused
 }
 ```
 
-Every entity carries `updatedAt`, stamped on each mutation, so sync can merge at
-the per-paper level. `ui` is deliberately device-local (theme and current
-selections differ per device) and is excluded from the synced document.
+Every entity and cell carries `updatedAt`, stamped on each mutation, so sync
+merges at the per-cell level (marking different parts on two devices both
+survive). `ui` is deliberately device-local (theme, current selections and the
+current part differ per device) and is excluded from the synced document.
 
 ## Key behaviours (do not break these)
 
@@ -112,41 +128,47 @@ selections differ per device) and is excluded from the synced document.
    (`buildLabels`). Collisions extend the prefix; identical full names get a
    numeric suffix. Privacy by construction: full names exist only in
    localStorage, labels are what render.
-2. **Missing ≠ unmarked**: three paper states. Missing papers are excluded
-   from an assessment's progress denominator so a job can reach 100% with
-   non-submissions; missing count shows separately.
-3. **Daily target** (per assessment): `ceil((remaining + markedToday) /
-   dueDaysLeft)`, computed in `assessmentStats`. Papers marked today count
-   toward today, so the target stays stable through the day instead of
-   shrinking as you work. Each job has its own due date; the dashboard sorts
-   jobs into three groups (markable now, then upcoming, then complete). A job
-   whose `dateSat` is in the future is "upcoming" (nothing to mark yet) and
-   sinks below active jobs. A student can sit late: `satOn` on their mark
-   overrides the job's `dateSat`, edited from the paper (student) view.
-4. **Mark done flow**: tick animation (respects `prefers-reduced-motion`),
-   green row flash, auto-advance to next unmarked paper after 350 ms. The
-   satisfying tick is a feature requirement, not decoration.
-5. **Tag interaction**: clicking a sidebar tag toggles it on the current
-   paper. Adding a new tag while a paper is selected auto-attaches it (you
-   just saw the mistake). Sidebar sorts by frequency within the current
-   assessment, most common first, with proportional bars.
-6. **Feedback prompt export** (`copyPrompt`): clipboard text containing first
-   name, class, assessment name, tagged issues as a list, optional marker's
-   note, and fixed constraints (address student directly, encouraging but
-   honest, ~80 words, do not invent issues beyond those listed). The owner
-   pastes this into Claude to generate the comment.
-7. **Two assessment exports, both in the workspace** (`class-summary-row`):
+2. **Parts and part-by-part marking**: an assessment optionally splits into
+   parts, edited from the job modal (one name per line; blank = single-part).
+   In a multi-part job a **part bar** (`renderPartBar`) selects the current
+   part; you mark that part across all students, then move on, keeping one
+   meter stick per part. When a part is finished, `gotoNextUnmarked` auto-jumps
+   to the next part with unmarked papers. Single-part jobs show no part bar and
+   behave as before.
+3. **Missing ≠ unmarked**: `mark.missing` is student-level (non-submission).
+   A missing student contributes no cells to the denominator, so a job can
+   reach 100% with non-submissions; missing count shows separately.
+4. **Daily target** (per assessment): `ceil((remaining + markedToday) /
+   dueDaysLeft)`, computed in `assessmentStats` in **cells** (student × part).
+   Cells marked today count toward today, so the target stays stable through
+   the day. Percentage and progress are cell-based too; for a single-part job a
+   cell equals a paper, so the numbers match the old behaviour. Each job has
+   its own due date; the dashboard sorts jobs into three groups (markable now,
+   then upcoming, then complete). A future `dateSat` marks a job "upcoming"
+   (nothing to mark yet). A student can sit late: `satOn` on their mark
+   overrides the job's `dateSat`, edited from the paper view.
+5. **Mark done flow**: marks the current cell; tick animation (respects
+   `prefers-reduced-motion`), green row flash, auto-advance to the next
+   unmarked student in the current part after 350 ms. The satisfying tick is a
+   feature requirement, not decoration.
+6. **Tag interaction**: tags attach to the current **cell** (student-part).
+   Clicking a sidebar tag toggles it; adding a new tag while a paper is
+   selected auto-attaches it. Sidebar sorts by frequency within the current
+   part, most common first, with proportional bars.
+7. **Feedback prompt export** (`copyPrompt`): clipboard text with first name,
+   class, assessment name, and the student's tagged issues and notes gathered
+   across every part (grouped by part name when multi-part), plus fixed
+   constraints (address student directly, encouraging but honest, ~80 words, do
+   not invent issues beyond those listed). The owner pastes this into Claude.
+8. **Two assessment exports, both in the workspace** (`class-summary-row`):
    **tag summary** (`copyAssessmentSummary`) is the frequency table for
    reteaching; **assessment data** (`copyAssessmentData`) is a full anonymous
-   dump of that one assessment, every paper's status/tags/note (papers
+   dump, every paper broken down by part with status/tags/note (papers
    numbered, no names) plus tag totals, for sharing or AI analysis.
-8. **Calibration check**: optional, off by default. Every N marked papers in
-   an assessment, a banner suggests re-reading the first marked paper for
-   drift.
 9. **Backup**: JSON export/import of the whole state. localStorage is
-   fragile (Safari eviction); this is the safety net. Import accepts a v2
-   backup (has `assessments`) or an old v1 backup (has `classes`), converting
-   the latter via `migrateV1()`.
+   fragile (Safari eviction); this is the safety net. Import accepts a v3 or v2
+   backup (has `assessments`) or an old v1 backup (has `classes`); `normalize`
+   upgrades older shapes on load.
 10. **All user text is escaped** through `esc()` before hitting innerHTML.
     Keep it that way for any new rendering code.
 11. **Sync** (optional, off until configured): whole state syncs through one
@@ -154,8 +176,9 @@ selections differ per device) and is excluded from the synced document.
     key (`markingConsole.sync`), never in `S`, so they never reach the gist or
     a backup. Sync is pull, merge, push in one action (`syncNow`); the merge
     (`mergeDocs`) is deterministic, commutative and idempotent, combining both
-    sides by per-entity/per-mark `updatedAt` with tombstones for deletions, so
-    two devices converge with no data loss and no forced conflict choice.
+    sides by per-entity/per-cell `updatedAt` with tombstones for deletions, so
+    two devices converge with no data loss and no forced conflict choice (mark
+    Section A on one device and Section B on another and both survive).
     Auto-sync runs on open and debounced after edits; a header button and a Set
     up section drive it manually. Comparison and the gist body use a **canonical
     serialisation** (`docString`: sorted keys, entity arrays sorted by id,
@@ -172,8 +195,8 @@ Colours are the Okabe-Ito colourblind-safe palette, held in CSS custom
 properties at the top of the stylesheet with semantic names: `--accent` =
 orange (primary accent / active), `--success` = green (completion), `--danger`
 = vermillion (missing / danger), `--info` = sky blue on dark / blue on light
-(copy, export, info), `--tag` = purple (tag system), `--warn` = yellow
-(calibration); each has a `-dim` companion where needed. Reuse the variables;
+(copy, export, info), `--tag` = purple (tag system); each has a `-dim`
+companion where needed. Reuse the variables;
 do not introduce new hex values inline. The light theme (`body.theme-light`)
 overrides these same variables with darker shades so text keeps contrast on
 cream; the hue relationships that carry the colourblind distinction are kept.
@@ -198,10 +221,11 @@ it; keep new colours as variables so both themes stay in sync.
 No test framework. Sanity check after changes:
 `node --check` on the extracted script block, then manual test of: first-run
 setup (add a class, then an assessment), roster paste with duplicate first
-names, opening a job from the dashboard, mark/unmark/missing cycle, tag
-toggle, both clipboard exports, JSON export/import round-trip, theme toggle,
-v1→v2 migration (load with only a `markingConsole.v1` key present), and a
-reload to confirm persistence. For sync, the merge (`mergeDocs`) can be tested
+names, a single-part job (mark/unmark/missing cycle, tag toggle), a multi-part
+job (part bar, mark a part across students, auto-jump to the next part,
+per-part tag counts), both clipboard exports, JSON export/import round-trip,
+theme toggle, v2→v3 and v1→v3 migration (load with only the older key present),
+and a reload to confirm persistence. For sync, the merge (`mergeDocs`) can be tested
 without a token by mocking `gistGet`/`gistPatch`/`gistCreate` in the console:
 check convergence (`docString(mergeDocs(A,B)) === docString(mergeDocs(B,A))`),
 idempotence, that two devices' marks on different papers both survive, and that
