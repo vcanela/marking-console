@@ -25,6 +25,7 @@
     --info: #56B4E9;         /* sky blue: copy / export / info */
     --tag: #CC79A7;          /* purple: tag system (trip hazards) */
     --tag-dim: #6e4560;
+    --flag: #F0E442;         /* yellow: flagged for moderation */
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
@@ -46,6 +47,7 @@
     --info: #0072A8;         /* blue: the cool copy/info role on light */
     --tag: #9a4f7d;       /* darkened purple */
     --tag-dim: #e7cfe0;
+    --flag: #7a6100;      /* darkened yellow (gold) for moderation on cream */
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
@@ -70,7 +72,6 @@
   .hdr-title { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
   .hdr-stats { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
   .hdr-stats b { color: var(--text); font-weight: 600; }
-  .hdr-stats .today-hit b { color: var(--success); }
   #settingsBtn {
     background: none; border: 1px solid var(--border); color: var(--muted);
     border-radius: 6px; padding: 4px 12px; font-family: var(--mono); font-size: 11px;
@@ -109,7 +110,10 @@
     height: 100%; background: linear-gradient(90deg, var(--accent-dim), var(--accent));
     width: 0%; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
-  .progress-label { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 110px; text-align: right; }
+  .progress-fill.met { background: linear-gradient(90deg, var(--success-dim), var(--success)); }
+  .progress-label { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 132px; text-align: right; }
+  .progress-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); min-width: 104px; }
+  .progress-wrap + .progress-wrap { margin-top: 6px; }
 
   /* ---------- Layout ---------- */
   main { display: grid; grid-template-columns: 300px 1fr 280px; gap: 0; min-height: calc(100vh - 92px); }
@@ -130,9 +134,11 @@
   .class-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(230, 159, 0, 0.10); }
   .class-chip .mini { color: var(--faint); margin-left: 5px; }
   .class-chip.active .mini { color: var(--accent-dim); }
-  #roster { overflow-y: auto; max-height: calc(100vh - 210px); }
+  /* No inner scrollbar: all students render, so up to ~30 fit without scrolling
+     and the page itself scrolls only if the class is larger or the window short. */
+  #roster { overflow: visible; }
   .stu-row {
-    display: flex; align-items: center; gap: 10px; padding: 7px 16px;
+    display: flex; align-items: center; gap: 10px; padding: 4px 16px;
     border-bottom: 1px solid rgba(41, 50, 63, 0.5); cursor: pointer;
   }
   .stu-row:hover { background: var(--panel); }
@@ -146,9 +152,11 @@
   .stu-status svg { display: none; width: 10px; height: 10px; stroke: var(--success); stroke-width: 3; fill: none; }
   .stu-row.missing .stu-status { border-color: var(--danger); background: rgba(213, 94, 0, 0.14); }
   .stu-row.missing .stu-status::after { content: '×'; color: var(--danger); font-size: 12px; line-height: 1; }
+  .stu-status { cursor: pointer; }
   .stu-label { font-family: var(--mono); font-size: 13px; }
   .stu-row.marked .stu-label { color: var(--muted); }
   .stu-row.missing .stu-label { color: var(--faint); text-decoration: line-through; }
+  .stu-flag { color: var(--flag); font-size: 12px; margin-left: 6px; }
   .stu-tagcount { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); }
 
   @keyframes tickpop {
@@ -212,6 +220,20 @@
   .btn-missing:hover { border-color: var(--danger); }
   .btn-copy { color: var(--info); }
   .btn-copy:hover { border-color: var(--info); }
+  .btn-hazard { color: var(--tag); }
+  .btn-hazard:hover { border-color: var(--tag); }
+  .btn-unmark { color: var(--muted); }
+  .btn-unmark:hover { border-color: var(--muted); }
+  .btn-flag { color: var(--flag); }
+  .btn-flag:hover { border-color: var(--flag); }
+  .btn-flag.on { background: rgba(240, 228, 66, 0.12); border-color: var(--flag); }
+  .paper-mod { margin-top: 12px; }
+  .paper-mod label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--flag); margin-bottom: 4px; }
+  .paper-mod textarea {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--flag); border-radius: 6px;
+    color: var(--text); font-size: 13px; padding: 8px 10px; resize: vertical; min-height: 38px;
+  }
+  .paper-mod textarea:focus { outline: none; border-color: var(--flag); }
   .nav-row { display: flex; gap: 8px; margin-top: 10px; }
   .btn-nav { padding: 6px 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .empty-state { padding: 40px 22px; color: var(--faint); text-align: center; font-size: 13px; }
@@ -305,8 +327,10 @@
   }
   .dash-hero-top { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
   .dash-bignum { font-family: var(--mono); font-size: 44px; font-weight: 600; color: var(--accent); line-height: 1; }
+  .dash-bignum.met { color: var(--success); }
   .dash-bigsub { font-family: var(--mono); font-size: 13px; color: var(--muted); }
   .progress-track.lg { height: 12px; border-radius: 6px; }
+  .dash-quote { font-family: var(--mono); font-size: 12px; color: var(--faint); text-align: center; line-height: 1.6; max-width: 620px; margin: 8px auto 0; font-style: italic; }
 
   .dash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; margin-bottom: 18px; }
   .tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
@@ -358,7 +382,7 @@
   @media (max-width: 980px) {
     #workspaceView { grid-template-columns: 1fr; }
     .col { border-right: none; border-bottom: 1px solid var(--border); }
-    #roster, #tagList { max-height: 300px; }
+    #tagList { max-height: 300px; }
   }
 </style>
 </head>
@@ -370,17 +394,20 @@
     <span class="hdr-title" id="hdrTitle">Marking Console</span>
     <div class="hdr-stats">
       <span>days left <b id="statDays">–</b></span>
-      <span>today's target <b id="statTarget">–</b></span>
-      <span class="today-hit">marked today <b id="statToday">0</b></span>
-      <span>missing <b id="statMissing">0</b></span>
     </div>
     <button id="syncBtn" title="Sync">⟳ Sync</button>
     <button id="themeBtn" title="Toggle light/dark">☀ Light</button>
     <button id="settingsBtn">Set up</button>
   </div>
   <div class="progress-wrap">
+    <span class="progress-tag">this assessment</span>
     <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
     <div class="progress-label" id="progressLabel">0 / 0 marked</div>
+  </div>
+  <div class="progress-wrap">
+    <span class="progress-tag">today's quota</span>
+    <div class="progress-track"><div class="progress-fill" id="quotaFill"></div></div>
+    <div class="progress-label" id="quotaLabel">today 0 / 0</div>
   </div>
 </header>
 
@@ -400,7 +427,7 @@
     <div id="partBar" class="part-bar"></div>
     <div id="paperPanel"></div>
     <div class="class-summary-row">
-      <button class="btn btn-copy" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy tag summary</button>
+      <button class="btn btn-hazard" id="classSummaryBtn" style="font-size:12px; padding:7px 12px;">Copy hazard summary</button>
       <button class="btn btn-copy" id="assessDataBtn" style="font-size:12px; padding:7px 12px;">Copy assessment data</button>
     </div>
   </section>
@@ -409,8 +436,8 @@
   <section class="col tag-col">
     <div class="col-head"><span>Trip hazards</span><span id="tagTotal"></span></div>
     <div id="tagAdd">
-      <input id="tagInput" placeholder="New tag, e.g. sig figs dropped" maxlength="80">
-      <button id="tagAddBtn" title="Add tag">+</button>
+      <input id="tagInput" placeholder="New trip hazard, e.g. sig figs dropped" maxlength="80">
+      <button id="tagAddBtn" title="Add trip hazard">+</button>
     </div>
     <div id="tagList"></div>
   </section>
@@ -497,7 +524,7 @@ const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
 const PART_ALL = '_all';
 
-const newMark = () => ({ missing: false, satOn: '', updatedAt: '', parts: {} });   // per student
+const newMark = () => ({ missing: false, flag: false, flagNote: '', satOn: '', updatedAt: '', parts: {} });   // per student
 const newCell = () => ({ done: false, tags: [], note: '', markedAt: null, updatedAt: '' });   // per student-part
 
 const blank = () => ({
@@ -530,7 +557,7 @@ function load() {
 function upgradeMark(m) {
   if (!m || typeof m !== 'object') return newMark();
   if (m.parts && typeof m.parts === 'object') {
-    const out = { missing: !!m.missing, satOn: m.satOn || '', updatedAt: m.updatedAt || '', parts: {} };
+    const out = { missing: !!m.missing, flag: !!m.flag, flagNote: m.flagNote || '', satOn: m.satOn || '', updatedAt: m.updatedAt || '', parts: {} };
     Object.keys(m.parts).forEach(pid => {
       const c = m.parts[pid] || {};
       out.parts[pid] = { done: !!c.done, tags: Array.isArray(c.tags) ? c.tags : [], note: c.note || '', markedAt: c.markedAt || null, updatedAt: c.updatedAt || '' };
@@ -539,6 +566,7 @@ function upgradeMark(m) {
   }
   return {
     missing: m.status === 'missing',
+    flag: false, flagNote: '',
     satOn: m.satOn || '',
     updatedAt: m.updatedAt || m.markedAt || '',
     parts: { [PART_ALL]: { done: m.status === 'marked', tags: Array.isArray(m.tags) ? m.tags : [], note: m.note || '', markedAt: m.markedAt || null, updatedAt: m.updatedAt || m.markedAt || '' } }
@@ -744,15 +772,50 @@ function toggleTheme() {
   save(); render();
 }
 
+// The day's quota across every active job: cells marked today against the sum
+// of today's per-job targets. This is the number meant to pull you along.
+function dailyQuota() {
+  let markedToday = 0, targetToday = 0;
+  S.assessments.map(assessmentStats).forEach(x => { markedToday += x.markedToday; if (x.dailyTarget) targetToday += x.dailyTarget; });
+  const toGo = Math.max(0, targetToday - markedToday);
+  const pct = targetToday ? Math.min(100, Math.round(100 * markedToday / targetToday)) : (markedToday ? 100 : 0);
+  const met = targetToday > 0 && markedToday >= targetToday;
+  return { markedToday, targetToday, toGo, pct, met };
+}
+
+// Literary, not cheesy. Attributed, no exclamation marks. Easy to curate.
+const QUOTES = [
+  { text: 'Ever tried. Ever failed. No matter. Try again. Fail again. Fail better.', who: 'Samuel Beckett, Worstward Ho' },
+  { text: 'We must imagine Sisyphus happy.', who: 'Albert Camus, The Myth of Sisyphus' },
+  { text: 'Begin at the beginning, and go on till you come to the end: then stop.', who: 'Lewis Carroll, Alice’s Adventures in Wonderland' },
+  { text: 'What we hope ever to do with ease, we must first learn to do with diligence.', who: 'Samuel Johnson' },
+  { text: 'Finish each day and be done with it. You have done what you could.', who: 'Ralph Waldo Emerson' },
+  { text: 'Work is love made visible.', who: 'Kahlil Gibran, The Prophet' },
+  { text: 'It is not that we have a short time to live, but that we waste much of it.', who: 'Seneca, On the Shortness of Life' },
+  { text: 'The reward of a thing well done is to have done it.', who: 'Ralph Waldo Emerson' },
+  { text: 'It does not matter how slowly you go as long as you do not stop.', who: 'Confucius, Analects' },
+  { text: 'The road goes ever on and on.', who: 'J. R. R. Tolkien, The Lord of the Rings' }
+];
+// Deterministic pick so a given day (plus offset) is stable across a session.
+function quoteLine(offset) {
+  const day = Math.floor(Date.now() / 86400000) + (offset || 0);
+  const q = QUOTES[((day % QUOTES.length) + QUOTES.length) % QUOTES.length];
+  return `“${q.text}” — ${q.who}`;
+}
+
 function renderHeader() {
   const a = curAssessment();
   const st = a ? assessmentStats(a) : null;
   document.getElementById('statDays').textContent = (st && st.dl !== null) ? st.dl : '–';
-  document.getElementById('statTarget').textContent = (st && st.dailyTarget !== null) ? st.dailyTarget : '–';
-  document.getElementById('statToday').textContent = st ? st.markedToday : 0;
-  document.getElementById('statMissing').textContent = st ? st.missing : 0;
   document.getElementById('progressFill').style.width = (st ? st.pct : 0) + '%';
   document.getElementById('progressLabel').textContent = st ? `${st.marked} / ${st.denom} marked (${st.pct}%)` : '0 / 0 marked';
+  const q = dailyQuota();
+  const qf = document.getElementById('quotaFill');
+  qf.style.width = q.pct + '%';
+  qf.classList.toggle('met', q.met);
+  document.getElementById('quotaLabel').textContent = q.targetToday
+    ? (q.met ? `today ${q.markedToday} / ${q.targetToday} · met` : `today ${q.markedToday} / ${q.targetToday} · ${q.toGo} to go`)
+    : `${q.markedToday} marked today`;
 }
 
 // ---------------- Dashboard (landing view) ----------------
@@ -771,16 +834,13 @@ function renderDashboard() {
   }
 
   const list = S.assessments.map(assessmentStats);
-  let marked = 0, denom = 0, remaining = 0, missing = 0, markedToday = 0, targetToday = 0;
-  list.forEach(x => {
-    marked += x.marked; denom += x.denom; remaining += x.remaining; missing += x.missing; markedToday += x.markedToday;
-    if (x.dailyTarget) targetToday += x.dailyTarget;
-  });
+  let marked = 0, denom = 0, remaining = 0, missing = 0;
+  list.forEach(x => { marked += x.marked; denom += x.denom; remaining += x.remaining; missing += x.missing; });
   const pct = denom ? Math.round(100 * marked / denom) : 0;
   const active = list.filter(x => !x.complete);
   const dued = active.map(x => x.a.dueDate).filter(Boolean).sort();
   const nextDue = dued.length ? dued[0] : '';
-  const onTrack = targetToday > 0 && markedToday >= targetToday;
+  const q = dailyQuota();
 
   // Jobs sorted into three groups: markable now, then upcoming (not yet sat),
   // then completed. Within the first and last, by due date (undated last);
@@ -801,16 +861,23 @@ function renderDashboard() {
       <div class="dash-h">Overall progress</div>
       <div class="dash-hero-top">
         <span class="dash-bignum">${pct}%</span>
-        <span class="dash-bigsub">${marked} of ${denom} papers marked${missing ? ` · ${missing} not submitted` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
+        <span class="dash-bigsub">${marked} of ${denom} marked${missing ? ` · ${missing} not submitted` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
       </div>
       <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </section>
+
+    <section class="dash-section">
+      <div class="dash-h">Today’s quota</div>
+      <div class="dash-hero-top">
+        <span class="dash-bignum${q.met ? ' met' : ''}">${q.markedToday}${q.targetToday ? ` / ${q.targetToday}` : ''}</span>
+        <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} to go today`) : 'set due dates on your jobs to get a daily quota'}</span>
+      </div>
+      <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill${q.met ? ' met' : ''}" style="width:${q.pct}%"></div></div>
     </section>
 
     <section class="dash-tiles">
       ${tile('Active jobs', active.length)}
       ${tile('Remaining', remaining, remaining === 0 ? 'good' : '')}
-      ${tile('Marked today', markedToday, onTrack ? 'good' : '')}
-      ${tile("Today's target", targetToday || '–')}
       ${tile('Missing', missing, missing ? 'warn' : '')}
     </section>
 
@@ -818,7 +885,9 @@ function renderDashboard() {
       <div class="dash-jobs-head"><span class="dash-h" style="margin-bottom:0;">Marking jobs</span>
         <button class="btn-newjob" onclick="openJobModal()">+ New marking job</button></div>
       ${order.map(jobCard).join('')}
-    </section>`;
+    </section>
+
+    <div class="dash-quote">${esc(quoteLine(0))}</div>`;
 }
 
 function tile(label, value, cls) {
@@ -934,15 +1003,30 @@ function renderRoster() {
     const m = markOf(a, s.id);
     const cell = cellOf(a, s.id, pid);
     const status = m.missing ? 'missing' : (cell.done ? 'marked' : 'unmarked');
+    const n = cell.tags.length;
     const row = document.createElement('div');
-    row.className = 'stu-row ' + status + (s.id === S.ui.currentStudent ? ' current' : '');
+    row.className = 'stu-row ' + status + (s.id === S.ui.currentStudent ? ' current' : '') + (m.flag ? ' flagged' : '');
     row.innerHTML = `
-      <span class="stu-status"><svg viewBox="0 0 12 12"><path d="M2 6.5 L5 9.5 L10 3"/></svg></span>
+      <span class="stu-status" title="Tick / untick"><svg viewBox="0 0 12 12"><path d="M2 6.5 L5 9.5 L10 3"/></svg></span>
       <span class="stu-label">${esc(s.label)}</span>
-      <span class="stu-tagcount">${cell.tags.length ? cell.tags.length + ' tag' + (cell.tags.length > 1 ? 's' : '') : ''}</span>`;
+      ${m.flag ? '<span class="stu-flag" title="Flagged for moderation">⚑</span>' : ''}
+      <span class="stu-tagcount">${n ? n + ' hazard' + (n > 1 ? 's' : '') : ''}</span>`;
     row.onclick = () => { S.ui.currentStudent = s.id; save(); render(); };
+    // The status box toggles done directly, for quick corrections.
+    const box = row.querySelector('.stu-status');
+    box.onclick = e => { e.stopPropagation(); toggleDoneFor(s.id); };
     holder.appendChild(row);
   });
+}
+// Toggle a student's current-part cell done/undone (used by the roster box).
+function toggleDoneFor(sid) {
+  const a = curAssessment(); if (!a) return;
+  if (markOf(a, sid).missing) return;
+  const cell = ensureCell(a, sid, curPart());
+  cell.done = !cell.done;
+  cell.markedAt = cell.done ? nowISO() : null;
+  cell.updatedAt = nowISO();
+  save(); render();
 }
 
 function renderPaper() {
@@ -997,17 +1081,27 @@ function renderPaper() {
   const cell = ensureCell(a, s.id, pid);
   const tagsHtml = cell.tags.length
     ? cell.tags.map(tid => `<span class="ptag">${esc(tagName(tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
-    : '<span class="paper-empty-tags">Click tags on the right as you spot mistakes.</span>';
+    : '<span class="paper-empty-tags">Click trip hazards on the right as you spot mistakes.</span>';
   const notePlaceholder = multi ? `Optional note on ${esc(partName)} (goes into the feedback prompt)` : 'Optional note for this paper (goes into the feedback prompt)';
+  const doneBtn = cell.done
+    ? `<button class="btn btn-unmark" onclick="unmarkCell()">↺ Un-mark${multi ? ' part' : ''}</button>`
+    : `<button class="btn btn-done" onclick="markDone()">✓ Mark ${multi ? 'part ' : ''}done</button>`;
+  const flagBtn = `<button class="btn btn-flag${m.flag ? ' on' : ''}" onclick="toggleFlag()">⚑ ${m.flag ? 'Flagged' : 'Flag for moderation'}</button>`;
+  const modBlock = m.flag
+    ? `<div class="paper-mod"><label for="flagInput">Moderation note</label>
+       <textarea id="flagInput" placeholder="Why is this flagged? Kept in the assessment data export.">${esc(m.flagNote || '')}</textarea></div>`
+    : '';
   holder.innerHTML = `
     <div class="paper-pos">${posLine}</div>
     <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
     <div class="paper-tags">${tagsHtml}</div>
     <textarea id="noteInput" placeholder="${notePlaceholder}">${esc(cell.note || '')}</textarea>
     ${satRow}
+    ${modBlock}
     <div class="paper-actions">
-      <button class="btn btn-done" onclick="markDone()">✓ ${multi ? 'Mark part done' : 'Mark done'}</button>
+      ${doneBtn}
       <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
+      ${flagBtn}
       <button class="btn btn-missing" onclick="toggleMissing()">Not submitted</button>
     </div>
     <div class="nav-row">
@@ -1020,6 +1114,10 @@ function renderPaper() {
   });
   document.getElementById('satInput').addEventListener('change', e => {
     const mm = ensureMark(a, s.id); mm.satOn = e.target.value; mm.updatedAt = nowISO(); save(); renderPaper();
+  });
+  const fi = document.getElementById('flagInput');
+  if (fi) fi.addEventListener('change', e => {
+    const mm = ensureMark(a, s.id); mm.flagNote = e.target.value; mm.updatedAt = nowISO(); save();
   });
 }
 
@@ -1078,7 +1176,7 @@ function addTag() {
   const input = document.getElementById('tagInput');
   const name = input.value.trim();
   if (!name) return;
-  if (S.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('Tag already exists'); return; }
+  if (S.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('That trip hazard already exists'); return; }
   const t = { id: uid(), name, updatedAt: nowISO() };
   S.tags.push(t);
   const a = curAssessment(); const s = curStudent();
@@ -1091,6 +1189,7 @@ function markDone() {
   const a = curAssessment(); const c = curClass(); const s = curStudent();
   if (!a || !c || !s) return;
   if (markOf(a, s.id).missing) return;
+  const wasMet = dailyQuota().met;
   const cell = ensureCell(a, s.id, curPart());
   cell.done = true;
   cell.markedAt = nowISO();
@@ -1104,7 +1203,26 @@ function markDone() {
     rows[idx].classList.add('just-marked');
     setTimeout(() => rows[idx] && rows[idx].classList.remove('just-marked'), 950);
   }
+  if (!wasMet && dailyQuota().met) toast('Daily quota met. ' + quoteLine(1));   // earned, not nagged
   setTimeout(gotoNextUnmarked, 350);
+}
+
+// Un-tick the current cell (mistake, or after moderation). Stays put.
+function unmarkCell() {
+  const a = curAssessment(); const s = curStudent();
+  if (!a || !s) return;
+  const cell = ensureCell(a, s.id, curPart());
+  cell.done = false; cell.markedAt = null; cell.updatedAt = nowISO();
+  save(); render();
+}
+
+// Flag / unflag the current student for moderation (whole paper).
+function toggleFlag() {
+  const a = curAssessment(); const s = curStudent();
+  if (!a || !s) return;
+  const m = ensureMark(a, s.id);
+  m.flag = !m.flag; m.updatedAt = nowISO();
+  save(); render();
 }
 
 function toggleMissing() {
@@ -1187,9 +1305,9 @@ function copyAssessmentSummary() {
   const rows = Object.entries(freq)
     .sort((x, y) => y[1] - x[1])
     .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(tid)}`);
-  let txt = `${c.name} — ${a.name} — tag summary (${st.marked}/${st.denom} cells marked, ${st.missing} not submitted)\n`;
-  txt += rows.length ? rows.join('\n') : '(no tags logged)';
-  clip(txt, 'Assessment summary copied');
+  let txt = `${c.name} — ${a.name} — trip-hazard summary (${st.marked}/${st.denom} cells marked, ${st.missing} not submitted)\n`;
+  txt += rows.length ? rows.join('\n') : '(no trip hazards logged)';
+  clip(txt, 'Hazard summary copied');
 }
 
 // Full anonymous dump of one assessment: every paper's status, tags and note,
@@ -1207,7 +1325,8 @@ function copyAssessmentData() {
   const dates = [];
   if (a.dateSat) dates.push(`sat ${a.dateSat}`);
   if (a.dueDate) dates.push(`due ${a.dueDate}`);
-  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${st.denom} cells marked across ${st.submitted} papers, ${st.missing} not submitted.`);
+  const flaggedCount = c.students.filter(s => markOf(a, s.id).flag).length;
+  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${st.denom} cells marked across ${st.submitted} papers, ${st.missing} not submitted${flaggedCount ? `, ${flaggedCount} flagged for moderation` : ''}.`);
   if (multi) L.push(`Parts: ${parts.map(p => p.name || 'Part').join(', ')}.`);
   L.push('');
   L.push('Papers:');
@@ -1217,7 +1336,9 @@ function copyAssessmentData() {
     const done = parts.filter(p => cellOf(a, s.id, p.id).done).length;
     let head = `- Paper ${i + 1} [${done}/${parts.length}${multi ? ' parts' : ''} marked]`;
     if (m.satOn && a.dateSat && m.satOn !== a.dateSat) head += ` (sat ${m.satOn})`;
+    if (m.flag) head += ' ⚑ flagged for moderation';
     L.push(head);
+    if (m.flag && m.flagNote && m.flagNote.trim()) L.push(`    moderation: ${m.flagNote.trim()}`);
     parts.forEach(p => {
       const cell = cellOf(a, s.id, p.id);
       const tags = cell.tags.map(tid => tagName(tid));
@@ -1545,7 +1666,7 @@ function mergeDocs(a, b) {
       const cx = mx.parts && mx.parts[pid], cy = my.parts && my.parts[pid];
       parts[pid] = (cx && cy) ? ((cy.updatedAt || '') > (cx.updatedAt || '') ? cy : cx) : (cx || cy);
     });
-    return { missing: mb.missing, satOn: mb.satOn, updatedAt: mb.updatedAt, parts };
+    return { missing: mb.missing, flag: mb.flag, flagNote: mb.flagNote, satOn: mb.satOn, updatedAt: mb.updatedAt, parts };
   };
   const assessments = mergeById(a.assessments, b.assessments, (x, y) => {
     const base = newer(x, y);   // name, dates and the parts definition follow the newer edit

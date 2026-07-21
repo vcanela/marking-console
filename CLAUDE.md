@@ -95,6 +95,7 @@ S = {
     marks: {                 // keyed by student id
       [studentId]: {
         missing,             // bool; non-submission excludes all this student's cells
+        flag, flagNote,      // moderation flag (whole paper) and its comment
         satOn,               // '' or 'YYYY-MM-DD'; per-student sit override (default = dateSat)
         updatedAt,           // ISO; student-level fields merge by this
         parts: {             // keyed by part id; one cell per part
@@ -147,24 +148,27 @@ current part differ per device) and is excluded from the synced document.
    then upcoming, then complete). A future `dateSat` marks a job "upcoming"
    (nothing to mark yet). A student can sit late: `satOn` on their mark
    overrides the job's `dateSat`, edited from the paper view.
-5. **Mark done flow**: marks the current cell; tick animation (respects
-   `prefers-reduced-motion`), green row flash, auto-advance to the next
-   unmarked student in the current part after 350 ms. The satisfying tick is a
-   feature requirement, not decoration.
-6. **Tag interaction**: tags attach to the current **cell** (student-part).
-   Clicking a sidebar tag toggles it; adding a new tag while a paper is
-   selected auto-attaches it. Sidebar sorts by frequency within the current
-   part, most common first, with proportional bars.
+5. **Mark done / un-tick**: `markDone` marks the current cell (tick animation,
+   respects `prefers-reduced-motion`; green row flash; auto-advance after
+   350 ms). It is reversible: a done cell shows an **Un-mark** button
+   (`unmarkCell`, no advance), and the roster status box toggles done directly
+   (`toggleDoneFor`) for quick corrections after moderation.
+6. **Trip hazards**: the canonical term everywhere (input, hints, the
+   **Copy hazard summary** button), coloured purple to tie to the Trip hazards
+   column. Hazards attach to the current **cell** (student-part); clicking a
+   sidebar hazard toggles it; adding a new one auto-attaches it. Sidebar sorts
+   by frequency within the current part, most common first, with bars.
 7. **Feedback prompt export** (`copyPrompt`): clipboard text with first name,
    class, assessment name, and the student's tagged issues and notes gathered
    across every part (grouped by part name when multi-part), plus fixed
    constraints (address student directly, encouraging but honest, ~80 words, do
    not invent issues beyond those listed). The owner pastes this into Claude.
 8. **Two assessment exports, both in the workspace** (`class-summary-row`):
-   **tag summary** (`copyAssessmentSummary`) is the frequency table for
-   reteaching; **assessment data** (`copyAssessmentData`) is a full anonymous
-   dump, every paper broken down by part with status/tags/note (papers
-   numbered, no names) plus tag totals, for sharing or AI analysis.
+   **hazard summary** (`copyAssessmentSummary`) is the trip-hazard frequency
+   table for reteaching; **assessment data** (`copyAssessmentData`) is a full
+   anonymous dump, every paper broken down by part with status/hazards/note
+   (papers numbered, no names) plus hazard totals and moderation flags, for
+   sharing or AI analysis.
 9. **Backup**: JSON export/import of the whole state. localStorage is
    fragile (Safari eviction); this is the safety net. Import accepts a v3 or v2
    backup (has `assessments`) or an old v1 backup (has `classes`); `normalize`
@@ -184,6 +188,17 @@ current part differ per device) and is excluded from the synced document.
     serialisation** (`docString`: sorted keys, entity arrays sorted by id,
     deviceId excluded) so identical data never ping-pongs between devices. The
     gist holds student names, so it is secret by construction (`public:false`).
+12. **Moderation**: a whole-paper flag (`mark.flag`) plus a comment
+    (`mark.flagNote`), toggled from the paper view (yellow `--flag`). Flagged
+    students show a ⚑ in the roster; the flag and comment appear in the
+    assessment data export as a moderation record.
+13. **Daily quota and motivation**: `dailyQuota()` sums cells marked today and
+    today's targets across all active jobs; a second header bar (and a
+    dashboard section) shows progress toward it, green when met. It replaces
+    the old "missing" header stat. A curated, attributed literary quote
+    (`QUOTES`, `quoteLine`) shows on the dashboard and, once, when the day's
+    quota is met. Keep the quotes literary and unfussy: no self-help, no
+    exclamation marks.
 
 ## Design language
 
@@ -195,8 +210,10 @@ Colours are the Okabe-Ito colourblind-safe palette, held in CSS custom
 properties at the top of the stylesheet with semantic names: `--accent` =
 orange (primary accent / active), `--success` = green (completion), `--danger`
 = vermillion (missing / danger), `--info` = sky blue on dark / blue on light
-(copy, export, info), `--tag` = purple (tag system); each has a `-dim`
-companion where needed. Reuse the variables;
+(copy, export, info), `--tag` = purple (trip-hazard system, and the hazard
+controls carry this colour so the concept is found by colour), `--flag` =
+yellow (flagged for moderation); each has a `-dim` companion where needed.
+Reuse the variables;
 do not introduce new hex values inline. The light theme (`body.theme-light`)
 overrides these same variables with darker shades so text keeps contrast on
 cream; the hue relationships that carry the colourblind distinction are kept.
@@ -221,10 +238,13 @@ it; keep new colours as variables so both themes stay in sync.
 No test framework. Sanity check after changes:
 `node --check` on the extracted script block, then manual test of: first-run
 setup (add a class, then an assessment), roster paste with duplicate first
-names, a single-part job (mark/unmark/missing cycle, tag toggle), a multi-part
-job (part bar, mark a part across students, auto-jump to the next part,
-per-part tag counts), both clipboard exports, JSON export/import round-trip,
-theme toggle, v2→v3 and v1→v3 migration (load with only the older key present),
+names, a single-part job (mark/un-tick/missing cycle, hazard toggle), a
+multi-part job (part bar, mark a part across students, auto-jump to the next
+part, per-part hazard counts), un-ticking from the roster box, flagging a
+student for moderation with a comment, the daily quota bar filling and turning
+green (and the quote on meeting it), both clipboard exports, JSON
+export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
+only the older key present),
 and a reload to confirm persistence. For sync, the merge (`mergeDocs`) can be tested
 without a token by mocking `gistGet`/`gistPatch`/`gistCreate` in the console:
 check convergence (`docString(mergeDocs(A,B)) === docString(mergeDocs(B,A))`),
