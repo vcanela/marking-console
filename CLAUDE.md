@@ -112,7 +112,7 @@ S = {
   }],
   tags: [{ id, name, updatedAt }],   // global tag library, shared across everything
   tombstones: { [id]: deletedAtISO },// deleted class/assessment/tag ids, so a merge cannot resurrect them
-  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme },  // device-local; NOT synced
+  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort },  // device-local; NOT synced
   settings: {}   // currently unused
 }
 ```
@@ -193,12 +193,17 @@ current part differ per device) and is excluded from the synced document.
     students show a ⚑ in the roster; the flag and comment appear in the
     assessment data export as a moderation record.
 13. **Daily quota and motivation**: `dailyQuota()` sums cells marked today and
-    today's targets across all active jobs; a second header bar (and a
-    dashboard section) shows progress toward it, green when met. It replaces
-    the old "missing" header stat. A curated, attributed literary quote
-    (`QUOTES`, `quoteLine`) shows on the dashboard and, once, when the day's
-    quota is met. Keep the quotes literary and unfussy: no self-help, no
-    exclamation marks.
+    today's targets across all active jobs; a second header bar shows progress
+    toward it, green when met (replaces the old "missing" header stat). On the
+    dashboard the quota section breaks the day down **per job** (`quotaRowsHtml`):
+    one mini-bar per dated active job of today-done vs its own daily target,
+    sorted most-urgent-first, so a Sunday deadline visibly needs more today
+    than a Tuesday one. The Marking Jobs cards are compact (no progress bar;
+    overall % as text) with a Due date / Class sort toggle (`ui.jobSort`,
+    `setJobSort`). A curated, attributed literary quote (`QUOTES`, `quoteLine`)
+    sits high on the dashboard and shows once when the quota is met. Keep the
+    quotes literary and unfussy: no self-help, no exclamation marks. (No archive
+    yet: completed jobs sink to the bottom of the list.)
 
 ## Design language
 

@@ -330,7 +330,23 @@
   .dash-bignum.met { color: var(--success); }
   .dash-bigsub { font-family: var(--mono); font-size: 13px; color: var(--muted); }
   .progress-track.lg { height: 12px; border-radius: 6px; }
-  .dash-quote { font-family: var(--mono); font-size: 12px; color: var(--faint); text-align: center; line-height: 1.6; max-width: 620px; margin: 8px auto 0; font-style: italic; }
+  .dash-quote { font-family: var(--mono); font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.6; max-width: 640px; margin: 0 auto 18px; font-style: italic; }
+
+  /* Today's quota: one compact bar per dated active job, most urgent first. */
+  .quota-row { margin-bottom: 11px; }
+  .quota-row:last-child { margin-bottom: 0; }
+  .quota-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 5px; }
+  .quota-job { font-size: 13px; font-weight: 600; }
+  .quota-row-num { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .quota-row-num.met { color: var(--success); }
+  .progress-track.sm { height: 7px; border-radius: 4px; }
+  .quota-empty { color: var(--faint); font-size: 12px; line-height: 1.6; }
+
+  .dash-jobs-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sort-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .sort-opt { background: none; border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 4px 10px; }
+  .sort-opt:hover { color: var(--accent); }
+  .sort-opt.on { background: rgba(230, 159, 0, 0.10); color: var(--accent); }
 
   .dash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; margin-bottom: 18px; }
   .tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
@@ -341,15 +357,14 @@
 
   .linklike { background: none; border: none; color: var(--info); font: inherit; padding: 0; text-decoration: underline; }
 
-  .class-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; margin-bottom: 10px; }
+  .class-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
   .class-card:last-child { margin-bottom: 0; }
   .class-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .class-card-name { font-size: 14px; font-weight: 600; }
   .job-class { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 8px; }
-  .job-due { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 4px; }
+  .job-due { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 3px; }
   .class-card-frac { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .class-card .progress-track { margin: 10px 0 9px; }
-  .class-card-foot { display: flex; align-items: center; gap: 12px; }
+  .class-card-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
   .cc-chip { font-family: var(--mono); font-size: 11px; color: var(--faint); }
   .cc-chip.miss { color: var(--danger); }
   .cc-chip.cc-done { color: var(--success); }
@@ -533,7 +548,7 @@ const blank = () => ({
   assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, parts:[{id,name,updatedAt}], marks:{sid:mark}}
   tags: [],             // {id, name, updatedAt}
   tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/tags
-  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark' },
+  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due' },
   settings: {}
 });
 
@@ -843,17 +858,16 @@ function renderDashboard() {
   const q = dailyQuota();
 
   // Jobs sorted into three groups: markable now, then upcoming (not yet sat),
-  // then completed. Within the first and last, by due date (undated last);
-  // upcoming sorts by its sit date.
+  // then completed. Within a group, by due date or by class per the toggle.
+  const mode = S.ui.jobSort === 'class' ? 'class' : 'due';
   const rank = x => x.complete ? 2 : (x.upcoming ? 1 : 0);
+  const byDue = (x, y) => (x.a.dueDate || '9999-99-99').localeCompare(y.a.dueDate || '9999-99-99') || (x.a.createdAt || '').localeCompare(y.a.createdAt || '');
   const order = list.slice().sort((x, y) => {
     const rr = rank(x) - rank(y);
     if (rr) return rr;
-    if (rank(x) === 1) {
-      return (x.a.dateSat || '9999-99-99').localeCompare(y.a.dateSat || '9999-99-99') || (x.a.createdAt || '').localeCompare(y.a.createdAt || '');
-    }
-    const dx = x.a.dueDate || '9999-99-99', dy = y.a.dueDate || '9999-99-99';
-    return dx.localeCompare(dy) || (x.a.createdAt || '').localeCompare(y.a.createdAt || '');
+    if (rank(x) === 1) return (x.a.dateSat || '9999-99-99').localeCompare(y.a.dateSat || '9999-99-99') || byDue(x, y);
+    if (mode === 'class') return (x.cls ? x.cls.name : '').localeCompare(y.cls ? y.cls.name : '') || byDue(x, y);
+    return byDue(x, y);
   });
 
   el.innerHTML = `
@@ -868,12 +882,14 @@ function renderDashboard() {
 
     <section class="dash-section">
       <div class="dash-h">Today’s quota</div>
-      <div class="dash-hero-top">
+      <div class="dash-hero-top" style="margin-bottom:14px;">
         <span class="dash-bignum${q.met ? ' met' : ''}">${q.markedToday}${q.targetToday ? ` / ${q.targetToday}` : ''}</span>
-        <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} to go today`) : 'set due dates on your jobs to get a daily quota'}</span>
+        <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} to go today, split by urgency below`) : 'set due dates on your jobs to get a daily quota'}</span>
       </div>
-      <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill${q.met ? ' met' : ''}" style="width:${q.pct}%"></div></div>
+      ${quotaRowsHtml(list)}
     </section>
+
+    <div class="dash-quote">${esc(quoteLine(0))}</div>
 
     <section class="dash-tiles">
       ${tile('Active jobs', active.length)}
@@ -882,13 +898,40 @@ function renderDashboard() {
     </section>
 
     <section class="dash-section">
-      <div class="dash-jobs-head"><span class="dash-h" style="margin-bottom:0;">Marking jobs</span>
-        <button class="btn-newjob" onclick="openJobModal()">+ New marking job</button></div>
+      <div class="dash-jobs-head">
+        <span class="dash-h" style="margin-bottom:0;">Marking jobs</span>
+        <span class="dash-jobs-tools">
+          <span class="sort-toggle">
+            <button class="sort-opt${mode === 'due' ? ' on' : ''}" onclick="setJobSort('due')">Due date</button>
+            <button class="sort-opt${mode === 'class' ? ' on' : ''}" onclick="setJobSort('class')">Class</button>
+          </span>
+          <button class="btn-newjob" onclick="openJobModal()">+ New marking job</button>
+        </span>
+      </div>
       ${order.map(jobCard).join('')}
-    </section>
-
-    <div class="dash-quote">${esc(quoteLine(0))}</div>`;
+    </section>`;
 }
+
+// Per-job share of today, sorted most urgent first: the fair distribution the
+// single quota number hides. Only dated, active (not complete/upcoming) jobs.
+function quotaRowsHtml(list) {
+  const jobs = list.filter(x => !x.complete && !x.upcoming && x.dailyTarget)
+    .sort((x, y) => (x.a.dueDate || '9999-99-99').localeCompare(y.a.dueDate || '9999-99-99') || (x.a.createdAt || '').localeCompare(y.a.createdAt || ''));
+  if (!jobs.length) return `<div class="quota-empty">No dated jobs to pace today. Add due dates so each job gets a daily share.</div>`;
+  return jobs.map(x => {
+    const done = x.markedToday, target = x.dailyTarget;
+    const pct = target ? Math.min(100, Math.round(100 * done / target)) : 0;
+    const met = done >= target;
+    return `<div class="quota-row">
+      <div class="quota-row-head">
+        <span class="quota-job">${esc(x.cls ? x.cls.name : '')}<span class="job-class">${esc(x.a.name)}</span></span>
+        <span class="quota-row-num${met ? ' met' : ''}">${done}/${target} today${x.dl !== null ? ` · ${x.dl}d` : ''}</span>
+      </div>
+      <div class="progress-track sm"><div class="progress-fill${met ? ' met' : ''}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+function setJobSort(mode) { S.ui.jobSort = mode; save(); render(); }
 
 function tile(label, value, cls) {
   return `<div class="tile ${cls || ''}"><div class="tile-label">${esc(label)}</div>
@@ -921,7 +964,6 @@ function jobCard(x) {
       </span>
     </div>
     <div class="job-due">${datesTxt}</div>
-    <div class="progress-track"><div class="progress-fill" style="width:${x.pct}%"></div></div>
     <div class="class-card-foot">${pace}${missChip}${btn}</div>
   </div>`;
 }
