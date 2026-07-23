@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marking Console — Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+  :root {
+    --bg: #10141a; --panel: #171d26; --panel-2: #1d2530; --border: #29323f;
+    --text: #e6ebf2; --muted: #8b96a5; --faint: #5b6673;
+    --accent: #E69F00; --success: #009E73; --info: #56B4E9; --tag: #CC79A7; --flag: #F0E442; --danger: #D55E00;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 22px 64px; }
+  a { color: var(--info); }
+
+  header { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }
+  .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  h1 { font-family: var(--mono); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .ver { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .back { margin-left: auto; font-family: var(--mono); font-size: 12px; }
+  .lede { color: var(--muted); margin-top: 10px; }
+  .principle { margin-top: 12px; padding: 12px 16px; border-left: 3px solid var(--accent); background: var(--panel); border-radius: 0 8px 8px 0; font-size: 14px; }
+
+  h2 { font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin: 34px 0 12px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .toc a { font-family: var(--mono); font-size: 12px; text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--muted); }
+  .toc a:hover { border-color: var(--info); color: var(--info); }
+
+  ol.steps { margin: 8px 0 0 20px; }
+  ol.steps li { margin-bottom: 6px; }
+
+  .recipe { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 15px 18px; margin-bottom: 14px; }
+  .recipe h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .scenario { color: var(--muted); font-style: italic; margin-bottom: 8px; }
+  .howto { margin: 0; }
+  .howto p { margin: 0; }
+  .howto .lab { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 2px; }
+  b.k { font-weight: 600; color: var(--accent); }          /* an action/button */
+  b.h { font-weight: 600; color: var(--tag); }             /* trip hazards */
+  b.f { font-weight: 600; color: var(--flag); }            /* moderation */
+  b.i { font-weight: 600; color: var(--info); }            /* copy / export */
+
+  .note { color: var(--muted); font-size: 14px; }
+  .changelog { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
+  .rel { margin-bottom: 16px; }
+  .rel .relhead { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .rel ul { margin: 6px 0 0 20px; color: var(--muted); font-size: 14px; }
+  footer { margin-top: 40px; border-top: 1px solid var(--border); padding-top: 16px; color: var(--faint); font-size: 13px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="top">
+    <h1>Marking Console</h1>
+    <span class="ver">Guide · v1.0.0</span>
+    <a class="back" href="marking-console.html">Open the app →</a>
+  </div>
+  <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
+  <div class="principle">The tool offloads two things only: <b>memory</b> (which mistakes have I already seen) and <b>drafting</b> (the wording of feedback). Every judgement stays with you.</div>
+</header>
+
+<nav class="toc">
+  <a href="#start">Quick start</a>
+  <a href="#deadlines">Deadlines</a>
+  <a href="#parts">Sections</a>
+  <a href="#hazards">Trip hazards</a>
+  <a href="#feedback">Feedback</a>
+  <a href="#absent">Absences</a>
+  <a href="#moderation">Moderation</a>
+  <a href="#fixing">Fixing marks</a>
+  <a href="#sync">Two devices</a>
+  <a href="#sharing">Sharing</a>
+  <a href="#privacy">Privacy</a>
+  <a href="#changelog">Changelog</a>
+</nav>
+
+<h2 id="start">Quick start</h2>
+<ol class="steps">
+  <li><b class="k">Set up</b> (top right) → add a class: give it a name and paste your roster, one student per line.</li>
+  <li>On the dashboard, <b class="k">+ New marking job</b> → pick the class, name the assessment, set the due date.</li>
+  <li><b class="k">Resume</b> the job and mark. Tick each paper; the dashboard keeps score and paces your days.</li>
+</ol>
+
+<h2>Recipes</h2>
+<p class="note" style="margin-bottom:12px;">Each is a situation, then exactly what to do.</p>
+
+<div class="recipe" id="deadlines">
+  <h3>Several jobs, different deadlines</h3>
+  <p class="scenario">11PSC's test is due Sunday; 13PHY's on Tuesday. Which do I push today?</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>Give each job its own due date when you create it. The dashboard's <b class="k">Today's quota</b> splits the day across jobs by urgency, so the Sunday job shows the bigger share to do today. Work down that list from the top.</p></div>
+</div>
+
+<div class="recipe" id="parts">
+  <h3>An assessment with sections</h3>
+  <p class="scenario">The test has Section A, B and C, and I want to hold the same standard across all of Section A before I move on.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>When creating (or editing) the job, put each section on its own line in <b class="k">Parts</b> (leave blank for a single-part assessment). While marking, pick a part tab and go down the whole class; finishing a part jumps you to the next. Leave Parts blank and it behaves as one whole-paper mark.</p></div>
+</div>
+
+<div class="recipe" id="hazards">
+  <h3>The same mistake, again and again</h3>
+  <p class="scenario">Half the class has dropped significant figures.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>Type it once in the <b class="h">Trip hazards</b> column (right), then click it on each paper where you see it. It counts as you go. <b class="i">Copy hazard summary</b> gives you the frequency table for planning your reteach.</p></div>
+</div>
+
+<div class="recipe" id="feedback">
+  <h3>A feedback comment for a student</h3>
+  <p class="scenario">I want a short, honest comment for Aroha.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>On her paper, <b class="i">Copy feedback prompt</b>, then paste into Claude. The prompt uses only the trip hazards and notes you logged (grouped by section), and asks for roughly 80 words, encouraging but honest, inventing nothing.</p></div>
+</div>
+
+<div class="recipe" id="absent">
+  <h3>A student was away</h3>
+  <p class="scenario">Sam was absent today, I must chase it — versus Sam sat out the whole unit, which is settled.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>On the paper, choose <b class="k">Absent — follow up</b> (shown in amber, counted on the dashboard so you do not forget) or <b class="k">Not sitting</b> (quiet, kept off the dashboard). When a followed-up student sits later: <b class="k">Mark present</b>, mark the work, and set <b class="k">Sat on</b> to the day they sat.</p></div>
+</div>
+
+<div class="recipe" id="moderation">
+  <h3>Flagging for moderation</h3>
+  <p class="scenario">A borderline script I want a second opinion on.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>On the paper, <b class="f">Flag for moderation</b> and add a note. Flagged papers show a ⚑ in the roster and appear, with your note, in <b class="i">Copy assessment data</b>.</p></div>
+</div>
+
+<div class="recipe" id="fixing">
+  <h3>Fixing a tick</h3>
+  <p class="scenario">I ticked the wrong student, or a mark changed after moderation.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p>Click the status box next to a name in the roster to tick or untick it, or use <b class="k">Un-mark</b> on the open paper. No score is ever locked.</p></div>
+</div>
+
+<div class="recipe" id="sync">
+  <h3>Marking on two devices</h3>
+  <p class="scenario">I start on the laptop and finish at a cafe on my phone.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p><b class="k">Set up</b> → Sync across devices. Make a GitHub token (classic, scope <span style="font-family:var(--mono)">gist</span>), paste it, <b class="k">Sync now</b>. On the phone, paste the same token and the gist id. It merges both ways, so marking Section A on one device and Section B on the other both survive.</p></div>
+</div>
+
+<div class="recipe" id="sharing">
+  <h3>Sharing results</h3>
+  <p class="scenario">I want a record, or something to analyse.</p>
+  <div class="howto"><span class="lab">In the app</span>
+    <p><b class="i">Copy hazard summary</b> for the reteaching table, or <b class="i">Copy assessment data</b> for a full anonymous dump of one assessment (papers numbered, no names) that you can file or paste into an AI to ask "how did this go".</p></div>
+</div>
+
+<h2 id="privacy">Privacy</h2>
+<p class="note">Student names live only in your browser, and, if you turn on sync, in a secret (unlisted) GitHub gist. The app file and the public site contain no student data, which is why they are safe to host and to share.</p>
+
+<h2 id="changelog">Changelog</h2>
+<div class="changelog">
+  <div class="rel">
+    <div class="relhead">1.0.0 — 2026-07-21 · first shared release</div>
+    <ul>
+      <li>Classes as persistent rosters; per-class marking jobs with due and sit dates.</li>
+      <li>Optional sections (parts) with part-by-part marking across the class.</li>
+      <li>Dashboard: overall progress, and a Today's quota that splits the day across jobs by deadline.</li>
+      <li>Trip hazards with per-part frequency; feedback-prompt, hazard-summary and assessment-data exports.</li>
+      <li>Absences split into follow-up (chase) and not-sitting (accepted); moderation flags with notes.</li>
+      <li>Un-tick from the paper or the roster; light and dark themes; cross-device sync via a secret gist.</li>
+      <li>A quiet literary quote on the dashboard and when the daily quota is met.</li>
+    </ul>
+  </div>
+</div>
+
+<footer>
+  <a href="marking-console.html">← Back to the Marking Console</a>
+</footer>
+
+</div>
+</body>
+</html>

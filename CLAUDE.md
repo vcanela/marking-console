@@ -26,9 +26,11 @@ never the marking itself.
 
 ## Hard constraints
 
-- One self-contained HTML file: `marking-console.html`. No frameworks, no build
-  step, no external dependencies except the Google Fonts import (IBM Plex,
-  degrades gracefully to system fonts offline).
+- The app is one self-contained HTML file: `marking-console.html`. No
+  frameworks, no build step, no external dependencies except the Google Fonts
+  import (IBM Plex, degrades gracefully to system fonts offline). Two sibling
+  static pages ship with it: `index.html` (redirects to the app) and
+  `guide.html` (the user guide, same self-contained rules and visual language).
 - Deployable to GitHub Pages as a static file. All data lives in the browser's
   localStorage; the file itself never contains student data, so public hosting
   is safe.
@@ -242,6 +244,17 @@ it; keep new colours as variables so both themes stay in sync.
   observed mistakes become distractor candidates for future questions.
 - Possible later extension to multi-user (colleagues marking shares); the
   current build is deliberately single-user.
+
+## Versioning and the guide
+
+The app is versioned with semver, held in one place: the `VERSION` constant at
+the top of the script in `marking-console.html`. It renders in the header
+(`#verLink`, links to the guide's changelog). **On every change, bump `VERSION`
+and add an entry in three places kept in step**: `CHANGELOG.md` (canonical),
+the header `Guide · vX.Y.Z` line and the `#changelog` section in `guide.html`.
+Patch for fixes, minor for features, major for a big shift. The guide is
+example-led and succinct by design (scenario, then the exact taps); keep it
+that way, and add a recipe when a feature genuinely needs one.
 
 ## Testing
 
