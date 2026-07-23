@@ -126,11 +126,15 @@ current part differ per device) and is excluded from the synced document.
 
 ## Key behaviours (do not break these)
 
-1. **Labels**: roster keeps the order entered or pasted (no sorting). Label
-   is first name + shortest unique surname prefix within the class
-   (`buildLabels`). Collisions extend the prefix; identical full names get a
-   numeric suffix. Privacy by construction: full names exist only in
-   localStorage, labels are what render.
+1. **Labels and minimal identity**: rosters store only first name + last
+   **initial** (a pasted full surname is reduced to its initial in `addClass`);
+   entry order is kept (no sorting). Label is first name + initial
+   (`buildLabels`); students who would share a label are numbered, and the
+   **Set up class editor** (`classLabelEditor`, pencil on a class) lets the
+   teacher rename any shown `s.label` to tell them apart without adding a full
+   surname. Existing pre-1.1.0 classes keep whatever surname they had; the
+   change applies to newly added classes. Privacy by construction: only what
+   renders is stored, and only in localStorage.
 2. **Parts and part-by-part marking**: an assessment optionally splits into
    parts, edited from the job modal (one name per line; blank = single-part).
    In a multi-part job a **part bar** (`renderPartBar`) selects the current

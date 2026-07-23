@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.0.2</span>
+    <span class="ver" id="ver">Guide · v1.1.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -80,7 +80,7 @@
 <section data-view="home">
   <h2>Quick start</h2>
   <ol class="steps">
-    <li><b class="k">Set up</b> (top right) → add a class: give it a name and paste your roster, one student per line.</li>
+    <li><b class="k">Set up</b> (top right) → add a class: give it a name and add your roster, one per line as first name and last initial (e.g. Sophia K). Full surnames are never stored.</li>
     <li>On the dashboard, <b class="k">+ New marking job</b> → pick the class, name the assessment, set its due date.</li>
     <li><b class="k">Resume</b> the job and start marking. Tick each paper; the dashboard keeps score and paces your days.</li>
   </ol>
@@ -190,12 +190,19 @@
   <button class="back" data-go="home">← Back</button>
   <h3>Privacy</h3>
   <p>Student names live only in your browser and, if you switch on sync, in a secret (unlisted) GitHub gist. The app file and the public website contain no student data, which is why they are safe to host and to hand around.</p>
-  <p>While you mark, students appear as a first name plus the shortest surname initial that keeps them distinct; full names are never shown on screen.</p>
+  <p>You enter only a first name and a last initial, and that is all that is stored; if you paste a full surname it is reduced to its initial. Where two students would share a label, the app numbers them and you can rename either from the Set up class editor, so you never need to store a full surname to tell them apart.</p>
 </section>
 
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.1.0 — 2026-07-23</div>
+    <ul>
+      <li>Rosters ask for first name and last initial only; full surnames are not stored.</li>
+      <li>A class label editor in Set up renames shown labels, to tell apart students who share one.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.0.2 — 2026-07-21</div>
     <ul>

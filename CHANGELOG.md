@@ -3,6 +3,15 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.1.0 — 2026-07-23
+
+- Rosters now ask for first name and last initial only; a pasted full surname
+  is reduced to its initial, so full surnames are no longer stored.
+- Duplicate labels (same first name and initial) are numbered, and a class
+  label editor in Set up lets you rename any shown label to tell students
+  apart without adding full surnames.
+- Existing classes are untouched; the change applies to newly added classes.
+
 ## 1.0.2 — 2026-07-21
 
 - First-run welcome banner on the dashboard linking the guide; it disappears on
