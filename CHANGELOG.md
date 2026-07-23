@@ -3,6 +3,12 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.0.1 — 2026-07-21
+
+- Guide: recipes are now individual pages (less clutter, more room to explain).
+- Guide: AI steps name no single assistant (Claude, ChatGPT, Gemini, etc.);
+  clearer scenario phrasing.
+
 ## 1.0.0 — 2026-07-21
 
 First shared release. Everything built to date:
