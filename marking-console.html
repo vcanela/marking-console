@@ -150,12 +150,15 @@
   .stu-row.marked .stu-status { border-color: var(--success); background: var(--success-dim); }
   .stu-row.marked .stu-status svg { display: block; }
   .stu-status svg { display: none; width: 10px; height: 10px; stroke: var(--success); stroke-width: 3; fill: none; }
-  .stu-row.missing .stu-status { border-color: var(--danger); background: rgba(213, 94, 0, 0.14); }
-  .stu-row.missing .stu-status::after { content: '×'; color: var(--danger); font-size: 12px; line-height: 1; }
+  .stu-row.followup .stu-status { border-color: var(--accent); background: rgba(230, 159, 0, 0.14); }
+  .stu-row.followup .stu-status::after { content: '!'; color: var(--accent); font-size: 11px; font-weight: 700; line-height: 1; }
+  .stu-row.notsitting .stu-status { border-color: var(--faint); background: transparent; }
+  .stu-row.notsitting .stu-status::after { content: '–'; color: var(--faint); font-size: 12px; line-height: 1; }
   .stu-status { cursor: pointer; }
   .stu-label { font-family: var(--mono); font-size: 13px; }
   .stu-row.marked .stu-label { color: var(--muted); }
-  .stu-row.missing .stu-label { color: var(--faint); text-decoration: line-through; }
+  .stu-row.followup .stu-label { color: var(--accent); }
+  .stu-row.notsitting .stu-label { color: var(--faint); text-decoration: line-through; }
   .stu-flag { color: var(--flag); font-size: 12px; margin-left: 6px; }
   .stu-tagcount { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); }
 
@@ -216,8 +219,6 @@
   .btn:hover { border-color: var(--muted); }
   .btn-done { background: var(--success-dim); border-color: var(--success); color: var(--success); }
   .btn-done:hover { background: rgba(0, 158, 115, 0.26); }
-  .btn-missing { color: var(--danger); }
-  .btn-missing:hover { border-color: var(--danger); }
   .btn-copy { color: var(--info); }
   .btn-copy:hover { border-color: var(--info); }
   .btn-hazard { color: var(--tag); }
@@ -227,6 +228,13 @@
   .btn-flag { color: var(--flag); }
   .btn-flag:hover { border-color: var(--flag); }
   .btn-flag.on { background: rgba(240, 228, 66, 0.12); border-color: var(--flag); }
+  .btn-followup { color: var(--accent); }
+  .btn-followup:hover { border-color: var(--accent); }
+  .btn-excused { color: var(--muted); }
+  .btn-excused:hover { border-color: var(--muted); }
+  .absence-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .absence-label { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .absence-row .btn { padding: 5px 12px; font-size: 12px; }
   .paper-mod { margin-top: 12px; }
   .paper-mod label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--flag); margin-bottom: 4px; }
   .paper-mod textarea {
@@ -354,6 +362,7 @@
   .tile-value { font-family: var(--mono); font-size: 26px; font-weight: 600; margin-top: 4px; color: var(--text); }
   .tile.good .tile-value { color: var(--success); }
   .tile.warn .tile-value { color: var(--danger); }
+  .tile.attn .tile-value { color: var(--accent); }
 
   .linklike { background: none; border: none; color: var(--info); font: inherit; padding: 0; text-decoration: underline; }
 
@@ -369,6 +378,7 @@
   .cc-chip.miss { color: var(--danger); }
   .cc-chip.cc-done { color: var(--success); }
   .cc-chip.up { color: var(--info); }
+  .cc-chip.followup { color: var(--accent); }
   .btn-resume {
     margin-left: auto; background: var(--panel); border: 1px solid var(--accent-dim); color: var(--accent);
     border-radius: 6px; padding: 5px 12px; font-family: var(--mono); font-size: 12px; font-weight: 600;
@@ -539,7 +549,7 @@ const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
 const PART_ALL = '_all';
 
-const newMark = () => ({ missing: false, flag: false, flagNote: '', satOn: '', updatedAt: '', parts: {} });   // per student
+const newMark = () => ({ absence: '', flag: false, flagNote: '', satOn: '', updatedAt: '', parts: {} });   // per student; absence: '' | 'followup' | 'notsitting'
 const newCell = () => ({ done: false, tags: [], note: '', markedAt: null, updatedAt: '' });   // per student-part
 
 const blank = () => ({
@@ -572,7 +582,8 @@ function load() {
 function upgradeMark(m) {
   if (!m || typeof m !== 'object') return newMark();
   if (m.parts && typeof m.parts === 'object') {
-    const out = { missing: !!m.missing, flag: !!m.flag, flagNote: m.flagNote || '', satOn: m.satOn || '', updatedAt: m.updatedAt || '', parts: {} };
+    const absence = m.absence || (m.missing ? 'followup' : '');   // old boolean missing becomes a follow-up
+    const out = { absence, flag: !!m.flag, flagNote: m.flagNote || '', satOn: m.satOn || '', updatedAt: m.updatedAt || '', parts: {} };
     Object.keys(m.parts).forEach(pid => {
       const c = m.parts[pid] || {};
       out.parts[pid] = { done: !!c.done, tags: Array.isArray(c.tags) ? c.tags : [], note: c.note || '', markedAt: c.markedAt || null, updatedAt: c.updatedAt || '' };
@@ -580,7 +591,7 @@ function upgradeMark(m) {
     return out;
   }
   return {
-    missing: m.status === 'missing',
+    absence: m.status === 'missing' ? 'followup' : '',
     flag: false, flagNote: '',
     satOn: m.satOn || '',
     updatedAt: m.updatedAt || m.markedAt || '',
@@ -658,6 +669,8 @@ const curStudent = () => {
 // Read a student's mark; returns a fresh default (not persisted) when absent.
 function markOf(a, sid) { return (a && a.marks[sid]) || newMark(); }
 function ensureMark(a, sid) { if (!a.marks[sid]) a.marks[sid] = newMark(); return a.marks[sid]; }
+// Either kind of absence keeps a student out of the marking denominator.
+function absent(m) { return m.absence === 'followup' || m.absence === 'notsitting'; }
 
 // Parts: an assessment with none behaves as one implicit part (PART_ALL).
 function partsOf(a) { return (a && a.parts && a.parts.length) ? a.parts : [{ id: PART_ALL, name: '' }]; }
@@ -697,10 +710,11 @@ function assessmentStats(a) {
   const parts = partsOf(a);
   const P = parts.length;
   const today = todayStr();
-  let denom = 0, marked = 0, markedToday = 0, missing = 0;
+  let denom = 0, marked = 0, markedToday = 0, followup = 0, notsitting = 0;
   students.forEach(s => {
     const m = markOf(a, s.id);
-    if (m.missing) { missing++; return; }
+    if (m.absence === 'followup') { followup++; return; }
+    if (m.absence === 'notsitting') { notsitting++; return; }
     denom += P;
     parts.forEach(p => {
       const c = cellOf(a, s.id, p.id);
@@ -714,15 +728,16 @@ function assessmentStats(a) {
   const dailyTarget = (dl && dl > 0) ? Math.ceil((remaining + markedToday) / dl) : null;
   const complete = denom > 0 && remaining === 0;
   const upcoming = !!a.dateSat && a.dateSat > today && !complete;
-  return { a, cls, parts: P, students: students.length, submitted: students.length - missing, marked, missing, markedToday, denom, remaining, pct, dl, dailyTarget, complete, upcoming };
+  const submitted = students.length - followup - notsitting;
+  return { a, cls, parts: P, students: students.length, submitted, marked, followup, notsitting, markedToday, denom, remaining, pct, dl, dailyTarget, complete, upcoming };
 }
 
-// Progress of a single part: cells done over submitting (non-missing) students.
+// Progress of a single part: cells done over students expected to sit it.
 function partStats(a, pid) {
   const cls = classOf(a);
   const students = cls ? cls.students : [];
   let done = 0, denom = 0;
-  students.forEach(s => { if (markOf(a, s.id).missing) return; denom++; if (cellOf(a, s.id, pid).done) done++; });
+  students.forEach(s => { if (absent(markOf(a, s.id))) return; denom++; if (cellOf(a, s.id, pid).done) done++; });
   return { done, denom };
 }
 
@@ -849,8 +864,8 @@ function renderDashboard() {
   }
 
   const list = S.assessments.map(assessmentStats);
-  let marked = 0, denom = 0, remaining = 0, missing = 0;
-  list.forEach(x => { marked += x.marked; denom += x.denom; remaining += x.remaining; missing += x.missing; });
+  let marked = 0, denom = 0, remaining = 0, followup = 0;
+  list.forEach(x => { marked += x.marked; denom += x.denom; remaining += x.remaining; followup += x.followup; });
   const pct = denom ? Math.round(100 * marked / denom) : 0;
   const active = list.filter(x => !x.complete);
   const dued = active.map(x => x.a.dueDate).filter(Boolean).sort();
@@ -875,7 +890,7 @@ function renderDashboard() {
       <div class="dash-h">Overall progress</div>
       <div class="dash-hero-top">
         <span class="dash-bignum">${pct}%</span>
-        <span class="dash-bigsub">${marked} of ${denom} marked${missing ? ` · ${missing} not submitted` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
+        <span class="dash-bigsub">${marked} of ${denom} marked${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
       </div>
       <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill" style="width:${pct}%"></div></div>
     </section>
@@ -894,7 +909,7 @@ function renderDashboard() {
     <section class="dash-tiles">
       ${tile('Active jobs', active.length)}
       ${tile('Remaining', remaining, remaining === 0 ? 'good' : '')}
-      ${tile('Missing', missing, missing ? 'warn' : '')}
+      ${tile('Follow up', followup, followup ? 'attn' : '')}
     </section>
 
     <section class="dash-section">
@@ -952,7 +967,7 @@ function jobCard(x) {
   else if (x.dl === 0) pace = `<span class="cc-chip miss">due now · ${x.remaining} left</span>`;
   else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
   else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
-  const missChip = x.missing ? `<span class="cc-chip miss">${x.missing} missing</span>` : '';
+  const missChip = x.followup ? `<span class="cc-chip followup">${x.followup} to follow up</span>` : '';
   const btn = `<button class="btn-resume" onclick="openAssessment('${a.id}')">${x.complete ? 'Review' : 'Resume ›'}</button>`;
   return `<div class="class-card">
     <div class="class-card-top">
@@ -976,7 +991,7 @@ function openAssessment(aid) {
   const pid = partsOf(a)[0].id;
   S.ui.currentPart = pid;
   const cls = classOf(a);
-  const first = cls ? (cls.students.find(s => !markOf(a, s.id).missing && !cellOf(a, s.id, pid).done) || cls.students[0]) : null;
+  const first = cls ? (cls.students.find(s => !absent(markOf(a, s.id)) && !cellOf(a, s.id, pid).done) || cls.students[0]) : null;
   S.ui.currentStudent = first ? first.id : null;
   S.ui.view = 'workspace';
   save(); render();
@@ -1000,8 +1015,8 @@ function selectPart(pid) {
   S.ui.currentPart = pid;
   const a = curAssessment(); const c = curClass();
   if (c) {
-    const first = c.students.find(s => !markOf(a, s.id).missing && !cellOf(a, s.id, pid).done)
-      || c.students.find(s => !markOf(a, s.id).missing) || c.students[0];
+    const first = c.students.find(s => !absent(markOf(a, s.id)) && !cellOf(a, s.id, pid).done)
+      || c.students.find(s => !absent(markOf(a, s.id))) || c.students[0];
     S.ui.currentStudent = first ? first.id : null;
   }
   save(); render();
@@ -1044,7 +1059,7 @@ function renderRoster() {
   c.students.forEach(s => {
     const m = markOf(a, s.id);
     const cell = cellOf(a, s.id, pid);
-    const status = m.missing ? 'missing' : (cell.done ? 'marked' : 'unmarked');
+    const status = m.absence === 'followup' ? 'followup' : m.absence === 'notsitting' ? 'notsitting' : (cell.done ? 'marked' : 'unmarked');
     const n = cell.tags.length;
     const row = document.createElement('div');
     row.className = 'stu-row ' + status + (s.id === S.ui.currentStudent ? ' current' : '') + (m.flag ? ' flagged' : '');
@@ -1063,7 +1078,7 @@ function renderRoster() {
 // Toggle a student's current-part cell done/undone (used by the roster box).
 function toggleDoneFor(sid) {
   const a = curAssessment(); if (!a) return;
-  if (markOf(a, sid).missing) return;
+  if (absent(markOf(a, sid))) return;
   const cell = ensureCell(a, sid, curPart());
   cell.done = !cell.done;
   cell.markedAt = cell.done ? nowISO() : null;
@@ -1100,14 +1115,22 @@ function renderPaper() {
   const satRow = `<div class="paper-sat">Sat on <input type="date" id="satInput" value="${esc(m.satOn || a.dateSat || '')}">
       <span class="paper-sat-hint">${(m.satOn && a.dateSat && m.satOn !== a.dateSat) ? 'later sitting' : ''}</span></div>`;
 
-  if (m.missing) {
+  if (absent(m)) {
+    const followup = m.absence === 'followup';
+    const msg = followup
+      ? 'Absent on the day — follow up. Excluded from progress until they sit.'
+      : 'Not sitting (excused). Excluded from progress; you will not be reminded.';
+    const other = followup
+      ? `<button class="btn btn-excused" onclick="setAbsence('notsitting')">Change to not sitting</button>`
+      : `<button class="btn btn-followup" onclick="setAbsence('followup')">Change to follow up</button>`;
     holder.innerHTML = `
       <div class="paper-pos">${posLine}</div>
       <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
-      <div class="paper-empty-tags" style="align-self:flex-start;">Marked not submitted; excluded from progress.</div>
+      <div class="paper-empty-tags" style="align-self:flex-start;">${msg}</div>
       ${satRow}
       <div class="paper-actions">
-        <button class="btn btn-missing" onclick="toggleMissing()">Un-mark missing</button>
+        <button class="btn btn-done" onclick="setAbsence('')">Mark present</button>
+        ${other}
       </div>
       <div class="nav-row">
         <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
@@ -1144,12 +1167,16 @@ function renderPaper() {
       ${doneBtn}
       <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
       ${flagBtn}
-      <button class="btn btn-missing" onclick="toggleMissing()">Not submitted</button>
     </div>
     <div class="nav-row">
       <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
       <button class="btn btn-nav" onclick="step(1)">Next →</button>
       <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
+    </div>
+    <div class="absence-row">
+      <span class="absence-label">Absent?</span>
+      <button class="btn btn-followup" onclick="setAbsence('followup')">Absent — follow up</button>
+      <button class="btn btn-excused" onclick="setAbsence('notsitting')">Not sitting</button>
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
     const cc = ensureCell(a, s.id, pid); cc.note = e.target.value; cc.updatedAt = nowISO(); save(); renderRoster();
@@ -1222,7 +1249,7 @@ function addTag() {
   const t = { id: uid(), name, updatedAt: nowISO() };
   S.tags.push(t);
   const a = curAssessment(); const s = curStudent();
-  if (a && s && !markOf(a, s.id).missing) { const cell = ensureCell(a, s.id, curPart()); cell.tags.push(t.id); cell.updatedAt = nowISO(); }   // adding a tag mid-paper almost always means you just saw it
+  if (a && s && !absent(markOf(a, s.id))) { const cell = ensureCell(a, s.id, curPart()); cell.tags.push(t.id); cell.updatedAt = nowISO(); }   // adding a hazard mid-paper almost always means you just saw it
   input.value = '';
   save(); render();
 }
@@ -1230,7 +1257,7 @@ function addTag() {
 function markDone() {
   const a = curAssessment(); const c = curClass(); const s = curStudent();
   if (!a || !c || !s) return;
-  if (markOf(a, s.id).missing) return;
+  if (absent(markOf(a, s.id))) return;
   const wasMet = dailyQuota().met;
   const cell = ensureCell(a, s.id, curPart());
   cell.done = true;
@@ -1267,11 +1294,12 @@ function toggleFlag() {
   save(); render();
 }
 
-function toggleMissing() {
+// kind: 'followup' | 'notsitting' | '' (present). Toggling the same kind clears it.
+function setAbsence(kind) {
   const a = curAssessment(); const s = curStudent();
   if (!a || !s) return;
   const m = ensureMark(a, s.id);
-  m.missing = !m.missing;
+  m.absence = (m.absence === kind) ? '' : kind;
   m.updatedAt = nowISO();
   save(); render();
 }
@@ -1294,14 +1322,14 @@ function gotoNextUnmarked() {
   const start = Math.max(0, c.students.findIndex(s => s.id === S.ui.currentStudent));
   for (let k = 1; k <= n; k++) {
     const s = c.students[(start + k) % n];
-    if (!markOf(a, s.id).missing && !cellOf(a, s.id, pid).done) { S.ui.currentStudent = s.id; save(); render(); return; }
+    if (!absent(markOf(a, s.id)) && !cellOf(a, s.id, pid).done) { S.ui.currentStudent = s.id; save(); render(); return; }
   }
   // current part done: move to the next part with unmarked papers
   const parts = partsOf(a);
   const ci = parts.findIndex(p => p.id === pid);
   for (let k = 1; k <= parts.length; k++) {
     const p = parts[(ci + k) % parts.length];
-    const firstUn = c.students.find(s => !markOf(a, s.id).missing && !cellOf(a, s.id, p.id).done);
+    const firstUn = c.students.find(s => !absent(markOf(a, s.id)) && !cellOf(a, s.id, p.id).done);
     if (firstUn) {
       S.ui.currentPart = p.id; S.ui.currentStudent = firstUn.id; save(); render();
       if (isMultiPart(a)) toast(`On to ${p.name || 'next part'}`);
@@ -1347,7 +1375,7 @@ function copyAssessmentSummary() {
   const rows = Object.entries(freq)
     .sort((x, y) => y[1] - x[1])
     .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(tid)}`);
-  let txt = `${c.name} — ${a.name} — trip-hazard summary (${st.marked}/${st.denom} cells marked, ${st.missing} not submitted)\n`;
+  let txt = `${c.name} — ${a.name} — trip-hazard summary (${st.marked}/${st.denom} cells marked, ${st.followup} to follow up, ${st.notsitting} not sitting)\n`;
   txt += rows.length ? rows.join('\n') : '(no trip hazards logged)';
   clip(txt, 'Hazard summary copied');
 }
@@ -1368,13 +1396,13 @@ function copyAssessmentData() {
   if (a.dateSat) dates.push(`sat ${a.dateSat}`);
   if (a.dueDate) dates.push(`due ${a.dueDate}`);
   const flaggedCount = c.students.filter(s => markOf(a, s.id).flag).length;
-  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${st.denom} cells marked across ${st.submitted} papers, ${st.missing} not submitted${flaggedCount ? `, ${flaggedCount} flagged for moderation` : ''}.`);
+  L.push(`${dates.length ? dates.join(', ') + '. ' : ''}${st.marked}/${st.denom} cells marked across ${st.submitted} papers, ${st.followup} to follow up, ${st.notsitting} not sitting${flaggedCount ? `, ${flaggedCount} flagged for moderation` : ''}.`);
   if (multi) L.push(`Parts: ${parts.map(p => p.name || 'Part').join(', ')}.`);
   L.push('');
   L.push('Papers:');
   c.students.forEach((s, i) => {
     const m = markOf(a, s.id);
-    if (m.missing) { L.push(`- Paper ${i + 1} [not submitted]`); return; }
+    if (m.absence) { L.push(`- Paper ${i + 1} [${m.absence === 'followup' ? 'absent — follow up' : 'not sitting'}]`); return; }
     const done = parts.filter(p => cellOf(a, s.id, p.id).done).length;
     let head = `- Paper ${i + 1} [${done}/${parts.length}${multi ? ' parts' : ''} marked]`;
     if (m.satOn && a.dateSat && m.satOn !== a.dateSat) head += ` (sat ${m.satOn})`;
@@ -1708,7 +1736,7 @@ function mergeDocs(a, b) {
       const cx = mx.parts && mx.parts[pid], cy = my.parts && my.parts[pid];
       parts[pid] = (cx && cy) ? ((cy.updatedAt || '') > (cx.updatedAt || '') ? cy : cx) : (cx || cy);
     });
-    return { missing: mb.missing, flag: mb.flag, flagNote: mb.flagNote, satOn: mb.satOn, updatedAt: mb.updatedAt, parts };
+    return { absence: mb.absence, flag: mb.flag, flagNote: mb.flagNote, satOn: mb.satOn, updatedAt: mb.updatedAt, parts };
   };
   const assessments = mergeById(a.assessments, b.assessments, (x, y) => {
     const base = newer(x, y);   // name, dates and the parts definition follow the newer edit

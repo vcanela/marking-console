@@ -94,7 +94,7 @@ S = {
     parts: [{ id, name, updatedAt }],   // [] means one implicit part (PART_ALL)
     marks: {                 // keyed by student id
       [studentId]: {
-        missing,             // bool; non-submission excludes all this student's cells
+        absence,             // '' | 'followup' (absent, chase) | 'notsitting' (excused); either excludes all cells
         flag, flagNote,      // moderation flag (whole paper) and its comment
         satOn,               // '' or 'YYYY-MM-DD'; per-student sit override (default = dateSat)
         updatedAt,           // ISO; student-level fields merge by this
@@ -136,9 +136,14 @@ current part differ per device) and is excluded from the synced document.
    meter stick per part. When a part is finished, `gotoNextUnmarked` auto-jumps
    to the next part with unmarked papers. Single-part jobs show no part bar and
    behave as before.
-3. **Missing ≠ unmarked**: `mark.missing` is student-level (non-submission).
-   A missing student contributes no cells to the denominator, so a job can
-   reach 100% with non-submissions; missing count shows separately.
+3. **Absence, two kinds** (`mark.absence`, student-level; both keep the
+   student out of the marking denominator, via `absent(m)`): `followup` means
+   absent on the day and needs chasing, surfaced in **amber** (roster "!"
+   marker, a dashboard "Follow up" tile and count, listed in exports);
+   `notsitting` means an accepted non-sit, kept **quiet** (muted, struck
+   through in the roster, absent from the dashboard, still in the data export).
+   Red is retired from absence. Set from the paper view; a followed-up student
+   who later sits is marked present and given a `satOn` late date.
 4. **Daily target** (per assessment): `ceil((remaining + markedToday) /
    dueDaysLeft)`, computed in `assessmentStats` in **cells** (student × part).
    Cells marked today count toward today, so the target stays stable through
@@ -243,7 +248,8 @@ it; keep new colours as variables so both themes stay in sync.
 No test framework. Sanity check after changes:
 `node --check` on the extracted script block, then manual test of: first-run
 setup (add a class, then an assessment), roster paste with duplicate first
-names, a single-part job (mark/un-tick/missing cycle, hazard toggle), a
+names, a single-part job (mark/un-tick, absence follow-up vs not-sitting,
+hazard toggle), a
 multi-part job (part bar, mark a part across students, auto-jump to the next
 part, per-part hazard counts), un-ticking from the roster box, flagging a
 student for moderation with a comment, the daily quota bar filling and turning
