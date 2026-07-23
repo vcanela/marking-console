@@ -3,6 +3,12 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.1.1 — 2026-07-23
+
+- Set up now shows a "N share a label" hint on any class with clashing
+  students, so shared labels are visible without opening the editor; clicking
+  it opens the label editor.
+
 ## 1.1.0 — 2026-07-23
 
 - Rosters now ask for first name and last initial only; a pasted full surname

@@ -301,6 +301,7 @@
     background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px;
     font-family: var(--mono); font-size: 12px;
   }
+  .cls-item .cls-clash { color: var(--accent); font-size: 11px; cursor: pointer; }
   .cls-item .cls-edit { margin-left: auto; background: none; border: none; color: var(--faint); font-size: 13px; }
   .cls-item .cls-edit:hover { color: var(--accent); }
   .cls-item .del { background: none; border: none; color: var(--faint); font-size: 14px; }
@@ -433,7 +434,7 @@
     <span class="hdr-title" id="hdrTitle">Marking Console</span>
     <span class="hdr-meta">
       <a class="hdr-link" href="guide.html" target="_blank" rel="noopener">Guide</a>
-      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.1.0</a>
+      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.1.1</a>
     </span>
     <div class="hdr-stats">
       <span>days left <b id="statDays">–</b></span>
@@ -562,7 +563,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.1.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.1.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1488,12 +1489,18 @@ function renderClassList() {
   const holder = document.getElementById('classList');
   holder.innerHTML = S.classes.length ? '' : '<div style="color:var(--faint);font-size:12px;margin-bottom:8px;">No classes yet.</div>';
   S.classes.forEach(c => {
+    const groups = {};
+    c.students.forEach(s => { const k = s.first + '|' + s.last; groups[k] = (groups[k] || 0) + 1; });
+    const clash = c.students.filter(s => groups[s.first + '|' + s.last] > 1).length;
     const d = document.createElement('div');
     d.className = 'cls-item';
     d.innerHTML = `<span>${esc(c.name)}</span><span style="color:var(--faint)">${c.students.length} students</span>
+      ${clash ? `<span class="cls-clash" title="Open the label editor to tell them apart">${clash} share a label</span>` : ''}
       <button class="cls-edit" title="Edit shown labels">✎</button>
       <button class="del" title="Delete class">×</button>`;
     d.querySelector('.cls-edit').onclick = () => toggleClassEditor(c.id);
+    const clashEl = d.querySelector('.cls-clash');
+    if (clashEl) clashEl.onclick = () => toggleClassEditor(c.id);
     d.querySelector('.del').onclick = () => {
       const n = S.assessments.filter(a => a.classId === c.id).length;
       if (confirm(`Delete ${c.name}${n ? ` and its ${n} assessment${n === 1 ? '' : 's'}` : ''}? This cannot be undone.`)) {
