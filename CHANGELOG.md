@@ -3,6 +3,11 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.0.2 — 2026-07-21
+
+- First-run welcome banner on the dashboard linking the guide; it disappears on
+  its own once the first marking job exists.
+
 ## 1.0.1 — 2026-07-21
 
 - Guide: recipes are now individual pages (less clutter, more room to explain).
