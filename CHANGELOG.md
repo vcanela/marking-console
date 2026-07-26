@@ -3,6 +3,12 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.2.0 — 2026-07-23
+
+- The dashboard "Follow up" tile is now clickable: it opens a popup listing
+  every student to follow up, with their class and assessment. Clicking one
+  jumps straight to that student's paper.
+
 ## 1.1.1 — 2026-07-23
 
 - Set up now shows a "N share a label" hint on any class with clashing

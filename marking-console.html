@@ -378,6 +378,18 @@
   .tile.good .tile-value { color: var(--success); }
   .tile.warn .tile-value { color: var(--danger); }
   .tile.attn .tile-value { color: var(--accent); }
+  button.tile { font: inherit; }
+  .tile.clickable { cursor: pointer; text-align: left; }
+  .tile.clickable:hover { border-color: var(--accent); }
+  .fu-item {
+    width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 13px; margin-bottom: 8px; cursor: pointer;
+    display: flex; flex-direction: column; gap: 2px; font-family: var(--sans);
+  }
+  .fu-item:hover { border-color: var(--accent); }
+  .fu-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .fu-meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .fu-empty { color: var(--faint); font-size: 13px; }
 
   .linklike { background: none; border: none; color: var(--info); font: inherit; padding: 0; text-decoration: underline; }
 
@@ -434,7 +446,7 @@
     <span class="hdr-title" id="hdrTitle">Marking Console</span>
     <span class="hdr-meta">
       <a class="hdr-link" href="guide.html" target="_blank" rel="noopener">Guide</a>
-      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.1.1</a>
+      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.2.0</a>
     </span>
     <div class="hdr-stats">
       <span>days left <b id="statDays">–</b></span>
@@ -553,6 +565,18 @@
   </div>
 </div>
 
+<!-- Follow-up students popup -->
+<div class="overlay" id="followupOverlay">
+  <div class="modal">
+    <h2>Follow up</h2>
+    <p class="sync-help" style="margin-bottom:12px;">Students marked absent on the day. Click one to jump to their paper.</p>
+    <div id="followupList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-done" id="followupCloseBtn">Done</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -563,7 +587,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.1.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.2.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -929,7 +953,9 @@ function renderDashboard() {
     <section class="dash-tiles">
       ${tile('Active jobs', active.length)}
       ${tile('Remaining', remaining, remaining === 0 ? 'good' : '')}
-      ${tile('Follow up', followup, followup ? 'attn' : '')}
+      ${followup
+        ? `<button class="tile attn clickable" onclick="openFollowup()" title="See who to follow up"><div class="tile-label">Follow up</div><div class="tile-value">${followup}</div></button>`
+        : tile('Follow up', 0)}
     </section>
 
     <section class="dash-section">
@@ -1052,6 +1078,45 @@ function goDashboard() {
   S.ui.view = 'dashboard';
   save(); render();
 }
+
+// Open an assessment focused on a specific student (used by the follow-up list).
+function openStudent(aid, sid) {
+  const a = S.assessments.find(x => x.id === aid);
+  if (!a) return;
+  S.ui.currentAssessment = aid;
+  S.ui.currentClass = a.classId;
+  S.ui.currentPart = partsOf(a)[0].id;
+  S.ui.currentStudent = sid;
+  S.ui.view = 'workspace';
+  closeFollowup();
+  save(); render();
+}
+
+// Every student flagged 'absent — follow up', across all assessments.
+function followupList() {
+  const out = [];
+  S.assessments.forEach(a => {
+    const cls = classOf(a); if (!cls) return;
+    cls.students.forEach(s => { if (markOf(a, s.id).absence === 'followup') out.push({ a, cls, s }); });
+  });
+  return out;
+}
+function openFollowup() {
+  const holder = document.getElementById('followupList');
+  const list = followupList();
+  if (!list.length) {
+    holder.innerHTML = '<div class="fu-empty">No students to follow up. 🎉</div>';
+  } else {
+    holder.innerHTML = list.map((x, i) => `<button class="fu-item" data-i="${i}">
+      <span class="fu-name">${esc(x.s.label)}</span>
+      <span class="fu-meta">${esc(x.cls.name)} · ${esc(x.a.name)}</span></button>`).join('');
+    [...holder.querySelectorAll('.fu-item')].forEach((el, i) => {
+      el.onclick = () => openStudent(list[i].a.id, list[i].s.id);
+    });
+  }
+  document.getElementById('followupOverlay').classList.add('open');
+}
+function closeFollowup() { document.getElementById('followupOverlay').classList.remove('open'); }
 
 // Sibling assessments of the current class, so you can flip between, say, a
 // test and a practical for the same class without going back to the dashboard.
@@ -1982,6 +2047,8 @@ document.getElementById('addClassBtn').onclick = addClass;
 document.getElementById('jobSaveBtn').onclick = saveJob;
 document.getElementById('jobCancelBtn').onclick = closeJobModal;
 document.getElementById('jobOverlay').addEventListener('click', e => { if (e.target.id === 'jobOverlay') closeJobModal(); });
+document.getElementById('followupCloseBtn').onclick = closeFollowup;
+document.getElementById('followupOverlay').addEventListener('click', e => { if (e.target.id === 'followupOverlay') closeFollowup(); });
 document.getElementById('tagAddBtn').onclick = addTag;
 document.getElementById('tagInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTag(); });
 document.getElementById('classSummaryBtn').onclick = copyAssessmentSummary;
