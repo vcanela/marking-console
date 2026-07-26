@@ -3,6 +3,15 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.3.0 — 2026-07-24
+
+- Trip hazards are now per assessment, not one global pile. Each job keeps its
+  own set; when creating a job you can share another job's set (for the same
+  test given to a second class). Existing data keeps one shared "legacy" set,
+  so nothing logged is lost.
+- Marking Jobs cards show sat / due / days-left as separate chips, with the
+  days-left chip coloured by urgency, so each fact is quick to find.
+
 ## 1.2.0 — 2026-07-23
 
 - The dashboard "Follow up" tile is now clickable: it opens a popup listing

@@ -93,6 +93,7 @@ S = {
     dateSat,                 // '' or 'YYYY-MM-DD'; a future date marks the job "upcoming"
     dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
     createdAt, updatedAt,    // ISO strings
+    hazardSet,               // id into S.hazardSets; assessments can share one set
     parts: [{ id, name, updatedAt }],   // [] means one implicit part (PART_ALL)
     marks: {                 // keyed by student id
       [studentId]: {
@@ -103,7 +104,7 @@ S = {
         parts: {             // keyed by part id; one cell per part
           [partId]: {
             done,            // bool
-            tags: [tagId, ...],  // mistakes observed on this part
+            tags: [tagId, ...],  // trip hazards observed on this part (ids into the assessment's hazard set)
             note,            // free text
             markedAt,        // ISO or null; drives "marked today"
             updatedAt        // ISO; drives sync merge (newer wins per cell)
@@ -112,8 +113,8 @@ S = {
       }
     }
   }],
-  tags: [{ id, name, updatedAt }],   // global tag library, shared across everything
-  tombstones: { [id]: deletedAtISO },// deleted class/assessment/tag ids, so a merge cannot resurrect them
+  hazardSets: { [setId]: [{ id, name, updatedAt }] },  // per-assessment trip-hazard sets; assessments may share a set
+  tombstones: { [id]: deletedAtISO },// deleted class/assessment ids, so a merge cannot resurrect them
   ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort },  // device-local; NOT synced
   settings: {}   // currently unused
 }
@@ -166,9 +167,15 @@ current part differ per device) and is excluded from the synced document.
    (`toggleDoneFor`) for quick corrections after moderation.
 6. **Trip hazards**: the canonical term everywhere (input, hints, the
    **Copy hazard summary** button), coloured purple to tie to the Trip hazards
-   column. Hazards attach to the current **cell** (student-part); clicking a
-   sidebar hazard toggles it; adding a new one auto-attaches it. Sidebar sorts
-   by frequency within the current part, most common first, with bars.
+   column. **Per assessment**, not global: each assessment points at a hazard
+   set in `S.hazardSets` (`hazardsOf`/`ensureHazardSet`), so the sidebar,
+   counts and summary are that assessment's own. Two jobs can **share** a set
+   (the same test in another class) — chosen from the job modal at creation
+   (`hazardSet` copied from the picked job). Hazards attach to the current
+   **cell** (student-part); clicking a sidebar hazard toggles it; adding a new
+   one auto-attaches it. Sidebar sorts by frequency within the current part.
+   `tagName(a, tid)` resolves within the assessment's set. Migration: the old
+   global `tags` becomes one shared `legacy` set kept by existing assessments.
 7. **Feedback prompt export** (`copyPrompt`): clipboard text with first name,
    class, assessment name, and the student's tagged issues and notes gathered
    across every part (grouped by part name when multi-part), plus fixed
@@ -191,7 +198,8 @@ current part differ per device) and is excluded from the synced document.
     key (`markingConsole.sync`), never in `S`, so they never reach the gist or
     a backup. Sync is pull, merge, push in one action (`syncNow`); the merge
     (`mergeDocs`) is deterministic, commutative and idempotent, combining both
-    sides by per-entity/per-cell `updatedAt` with tombstones for deletions, so
+    sides by per-entity/per-cell `updatedAt` (hazard sets merge by set id, tags
+    within a set by `updatedAt`) with tombstones for deletions, so
     two devices converge with no data loss and no forced conflict choice (mark
     Section A on one device and Section B on another and both survive).
     Auto-sync runs on open and debounced after edits; a header button and a Set

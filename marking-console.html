@@ -399,6 +399,13 @@
   .class-card-name { font-size: 14px; font-weight: 600; }
   .job-class { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 8px; }
   .job-due { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 3px; }
+  .job-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .job-chip { font-family: var(--mono); font-size: 11px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; }
+  .job-chip .jc-k { color: var(--faint); }
+  .job-chip.muted { color: var(--faint); }
+  .job-chip.left.soon { color: var(--accent); border-color: var(--accent); }
+  .job-chip.left.danger { color: var(--danger); border-color: var(--danger); }
+  .job-chip.up { color: var(--info); border-color: var(--info); }
   .class-card-frac { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
   .class-card-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
   .cc-chip { font-family: var(--mono); font-size: 11px; color: var(--faint); }
@@ -446,7 +453,7 @@
     <span class="hdr-title" id="hdrTitle">Marking Console</span>
     <span class="hdr-meta">
       <a class="hdr-link" href="guide.html" target="_blank" rel="noopener">Guide</a>
-      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.2.0</a>
+      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.3.0</a>
     </span>
     <div class="hdr-stats">
       <span>days left <b id="statDays">–</b></span>
@@ -558,6 +565,11 @@
     <label for="jobParts">Parts, one per line (leave blank for a single-part assessment)</label>
     <textarea id="jobParts" placeholder="Section A&#10;Section B&#10;Section C"></textarea>
     <p class="sync-help" style="margin-top:-4px;">You mark one part across all students, then the next. Renaming a part keeps its marks; removing a part deletes its marks.</p>
+    <div id="jobHazardsRow">
+      <label for="jobHazards">Trip hazards</label>
+      <select id="jobHazards"></select>
+      <p class="sync-help" style="margin-top:-4px;">Each job keeps its own trip hazards. Share a set only when this is the same test as another job (e.g. the same test in another class).</p>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-done" id="jobSaveBtn">Add job</button>
       <button class="btn" id="jobCancelBtn">Cancel</button>
@@ -587,7 +599,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.2.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.3.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -599,9 +611,9 @@ const newCell = () => ({ done: false, tags: [], note: '', markedAt: null, update
 const blank = () => ({
   meta: { deviceId: uid() + uid(), updatedAt: '' },   // deviceId is per-browser; updatedAt tracks non-entity changes
   classes: [],          // {id, name, updatedAt, students:[{id, first, last, label, updatedAt}]}
-  assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, parts:[{id,name,updatedAt}], marks:{sid:mark}}
-  tags: [],             // {id, name, updatedAt}
-  tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/tags
+  assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, hazardSet, parts:[...], marks:{sid:mark}}
+  hazardSets: {},       // {setId: [{id, name, updatedAt}]} trip-hazard sets; an assessment points at one via hazardSet
+  tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments
   ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due' },
   settings: {}
 });
@@ -650,11 +662,18 @@ function normalize(d) {
   d = d || {};
   d.classes = Array.isArray(d.classes) ? d.classes : [];
   d.assessments = Array.isArray(d.assessments) ? d.assessments : [];
-  d.tags = Array.isArray(d.tags) ? d.tags : [];
+  d.hazardSets = (d.hazardSets && typeof d.hazardSets === 'object') ? d.hazardSets : {};
   d.tombstones = (d.tombstones && typeof d.tombstones === 'object') ? d.tombstones : {};
   d.meta = Object.assign({ deviceId: '', updatedAt: '' }, d.meta || {});
   if (!d.meta.deviceId) d.meta.deviceId = uid() + uid();
-  d.tags.forEach(t => { if (t.updatedAt == null) t.updatedAt = ''; });
+  // Old global tag library becomes one shared "legacy" hazard set that existing
+  // assessments keep pointing at, so nothing logged is lost.
+  if (Array.isArray(d.tags) && d.tags.length) {
+    d.hazardSets.legacy = d.hazardSets.legacy || d.tags.map(t => ({ id: t.id, name: t.name, updatedAt: t.updatedAt || '' }));
+    d.assessments.forEach(a => { if (!a.hazardSet) a.hazardSet = 'legacy'; });
+  }
+  delete d.tags;
+  Object.values(d.hazardSets).forEach(list => (list || []).forEach(t => { if (t.updatedAt == null) t.updatedAt = ''; }));
   d.classes.forEach(c => {
     if (c.updatedAt == null) c.updatedAt = '';
     (c.students || []).forEach(s => { if (s.updatedAt == null) s.updatedAt = ''; });
@@ -664,6 +683,8 @@ function normalize(d) {
     a.parts.forEach(p => { if (p.updatedAt == null) p.updatedAt = ''; });
     if (!a.marks || typeof a.marks !== 'object') a.marks = {};
     if (a.updatedAt == null) a.updatedAt = a.createdAt || '';
+    if (!a.hazardSet) a.hazardSet = uid();               // each new/orphan assessment gets its own set
+    if (!d.hazardSets[a.hazardSet]) d.hazardSets[a.hazardSet] = [];
     Object.keys(a.marks).forEach(sid => { a.marks[sid] = upgradeMark(a.marks[sid]); });
   });
   d.ui = Object.assign({}, b.ui, d.ui || {});
@@ -729,7 +750,16 @@ function curPart() {
   return parts[0].id;
 }
 
-const tagName = tagId => (S.tags.find(t => t.id === tagId) || {}).name || '?';
+// Trip hazards live in per-assessment sets (S.hazardSets), so an assessment may
+// share a set with another (the same test in a second class). All lookups are
+// scoped to the assessment's set.
+function hazardsOf(a) { return (a && S.hazardSets[a.hazardSet]) || []; }
+function ensureHazardSet(a) {
+  if (!a.hazardSet) a.hazardSet = uid();
+  if (!S.hazardSets[a.hazardSet]) S.hazardSets[a.hazardSet] = [];
+  return S.hazardSets[a.hazardSet];
+}
+const tagName = (a, tid) => (hazardsOf(a).find(t => t.id === tid) || {}).name || '?';
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function nowISO() { return new Date().toISOString(); }
@@ -1007,16 +1037,22 @@ function tile(label, value, cls) {
 
 function jobCard(x) {
   const a = x.a, cls = x.cls;
-  const dateParts = [];
-  if (a.dateSat) dateParts.push(`sat ${esc(fmtDate(a.dateSat))}`);
-  dateParts.push(a.dueDate
-    ? `due ${esc(fmtDate(a.dueDate))}${x.dl !== null ? ` · ${x.dl} day${x.dl === 1 ? '' : 's'} left` : ''}`
-    : 'no due date');
-  const datesTxt = dateParts.join(' · ');
+  // Each fact as its own chip, so sat / due / days-left are quick to find; the
+  // days-left chip is coloured by urgency.
+  const chips = [];
+  if (a.dateSat) chips.push(`<span class="job-chip"><span class="jc-k">sat</span> ${esc(fmtDate(a.dateSat))}</span>`);
+  chips.push(a.dueDate
+    ? `<span class="job-chip"><span class="jc-k">due</span> ${esc(fmtDate(a.dueDate))}</span>`
+    : `<span class="job-chip muted">no due date</span>`);
+  if (x.dl !== null && !x.complete) {
+    const urg = x.dl === 0 ? ' danger' : (x.dl <= 2 ? ' soon' : '');
+    chips.push(`<span class="job-chip left${urg}">${x.dl === 0 ? 'due today' : x.dl + ' day' + (x.dl === 1 ? '' : 's') + ' left'}</span>`);
+  }
+  if (x.upcoming) chips.push(`<span class="job-chip up">upcoming</span>`);
   let pace;
   if (x.complete) pace = `<span class="cc-chip cc-done">Complete ✓</span>`;
-  else if (x.upcoming) pace = `<span class="cc-chip up">upcoming</span>`;
-  else if (x.dl === 0) pace = `<span class="cc-chip miss">due now · ${x.remaining} left</span>`;
+  else if (x.upcoming) pace = `<span class="cc-chip up">not sat yet</span>`;
+  else if (x.dl === 0) pace = `<span class="cc-chip miss">${x.remaining} left</span>`;
   else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
   else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
   const missChip = x.followup ? `<span class="cc-chip followup">${x.followup} to follow up</span>` : '';
@@ -1030,7 +1066,7 @@ function jobCard(x) {
         <button class="job-icon job-del" title="Delete job" onclick="deleteAssessment('${a.id}')">×</button>
       </span>
     </div>
-    <div class="job-due">${datesTxt}</div>
+    <div class="job-chips">${chips.join('')}</div>
     <div class="class-card-foot">${pace}${missChip}${btn}</div>
   </div>`;
 }
@@ -1236,7 +1272,7 @@ function renderPaper() {
 
   const cell = ensureCell(a, s.id, pid);
   const tagsHtml = cell.tags.length
-    ? cell.tags.map(tid => `<span class="ptag">${esc(tagName(tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
+    ? cell.tags.map(tid => `<span class="ptag">${esc(tagName(a, tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
     : '<span class="paper-empty-tags">Click trip hazards on the right as you spot mistakes.</span>';
   const notePlaceholder = multi ? `Optional note on ${esc(partName)} (goes into the feedback prompt)` : 'Optional note for this paper (goes into the feedback prompt)';
   const doneBtn = cell.done
@@ -1288,12 +1324,13 @@ function renderTags() {
   const s = curStudent();
   const pid = curPart();
   const cell = (a && s) ? cellOf(a, s.id, pid) : null;
-  if (!S.tags.length) {
+  const hazards = hazardsOf(a);
+  if (!hazards.length) {
     list.innerHTML = '<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency within the part you are marking so common mistakes rise to the top.</div>';
     document.getElementById('tagTotal').textContent = '';
     return;
   }
-  const counts = S.tags.map(t => ({ t, n: a ? tagCountInPart(a, pid, t.id) : 0 }));
+  const counts = hazards.map(t => ({ t, n: a ? tagCountInPart(a, pid, t.id) : 0 }));
   counts.sort((x, y) => y.n - x.n || x.t.name.localeCompare(y.t.name));
   const max = Math.max(1, ...counts.map(x => x.n));
   counts.forEach(({ t, n }) => {
@@ -1336,11 +1373,14 @@ function addTag() {
   const input = document.getElementById('tagInput');
   const name = input.value.trim();
   if (!name) return;
-  if (S.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('That trip hazard already exists'); return; }
+  const a = curAssessment();
+  if (!a) { toast('Open a marking job first'); return; }
+  const set = ensureHazardSet(a);
+  if (set.some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('That trip hazard already exists'); return; }
   const t = { id: uid(), name, updatedAt: nowISO() };
-  S.tags.push(t);
-  const a = curAssessment(); const s = curStudent();
-  if (a && s && !absent(markOf(a, s.id))) { const cell = ensureCell(a, s.id, curPart()); cell.tags.push(t.id); cell.updatedAt = nowISO(); }   // adding a hazard mid-paper almost always means you just saw it
+  set.push(t);
+  const s = curStudent();
+  if (s && !absent(markOf(a, s.id))) { const cell = ensureCell(a, s.id, curPart()); cell.tags.push(t.id); cell.updatedAt = nowISO(); }   // adding a hazard mid-paper almost always means you just saw it
   input.value = '';
   save(); render();
 }
@@ -1440,7 +1480,7 @@ function copyPrompt() {
   let txt = `Write a feedback comment for ${s.first}, a student in my ${c.name} class, on ${a.name}.\n\n`;
   // Gather this student's observations across every part.
   const blocks = partsOf(a).map(p => ({ name: p.name, cell: cellOf(a, s.id, p.id) }))
-    .map(b => ({ name: b.name, tags: b.cell.tags.map(tid => tagName(tid)), note: (b.cell.note || '').trim() }))
+    .map(b => ({ name: b.name, tags: b.cell.tags.map(tid => tagName(a, tid)), note: (b.cell.note || '').trim() }))
     .filter(b => b.tags.length || b.note);
   if (blocks.length) {
     txt += `Observed issues from my marking:\n`;
@@ -1465,7 +1505,7 @@ function copyAssessmentSummary() {
   c.students.forEach(s => partsOf(a).forEach(p => cellOf(a, s.id, p.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; })));
   const rows = Object.entries(freq)
     .sort((x, y) => y[1] - x[1])
-    .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(tid)}`);
+    .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(a, tid)}`);
   let txt = `${c.name} — ${a.name} — trip-hazard summary (${st.marked}/${st.denom} cells marked, ${st.followup} to follow up, ${st.notsitting} not sitting)\n`;
   txt += rows.length ? rows.join('\n') : '(no trip hazards logged)';
   clip(txt, 'Hazard summary copied');
@@ -1502,7 +1542,7 @@ function copyAssessmentData() {
     if (m.flag && m.flagNote && m.flagNote.trim()) L.push(`    moderation: ${m.flagNote.trim()}`);
     parts.forEach(p => {
       const cell = cellOf(a, s.id, p.id);
-      const tags = cell.tags.map(tid => tagName(tid));
+      const tags = cell.tags.map(tid => tagName(a, tid));
       if (!multi) {
         let l = `    ${tags.length ? tags.join('; ') : '(no tags)'}`;
         if (cell.note && cell.note.trim()) l += ` — note: ${cell.note.trim()}`;
@@ -1516,7 +1556,7 @@ function copyAssessmentData() {
   });
   const freq = {};
   c.students.forEach(s => parts.forEach(p => cellOf(a, s.id, p.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; })));
-  const rows = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(([tid, n]) => `  ${n} × ${tagName(tid)}`);
+  const rows = Object.entries(freq).sort((p, q) => q[1] - p[1]).map(([tid, n]) => `  ${n} × ${tagName(a, tid)}`);
   if (rows.length) { L.push(''); L.push('Tag totals (across all parts):'); rows.forEach(r => L.push(r)); }
   clip(L.join('\n'), 'Assessment data copied');
 }
@@ -1648,12 +1688,15 @@ function openJobModal(editId) {
   const satEl = document.getElementById('jobSat');
   const dueEl = document.getElementById('jobDue');
   const partsEl = document.getElementById('jobParts');
+  const hazRow = document.getElementById('jobHazardsRow');
+  const hazSel = document.getElementById('jobHazards');
   if (editingJobId) {
     const a = S.assessments.find(x => x.id === editingJobId);
     if (!a) { editingJobId = null; return; }
     sel.value = a.classId; sel.disabled = true;           // class is fixed once a job exists
     nameEl.value = a.name; satEl.value = a.dateSat || ''; dueEl.value = a.dueDate || '';
     partsEl.value = (a.parts || []).map(p => p.name).join('\n');
+    hazRow.hidden = true;                                  // hazard sharing is chosen at creation only
     document.getElementById('jobModalTitle').textContent = 'Edit marking job';
     document.getElementById('jobSaveBtn').textContent = 'Save changes';
   } else {
@@ -1661,6 +1704,10 @@ function openJobModal(editId) {
     sel.disabled = false;
     if (S.classes[0]) sel.value = S.classes[0].id;
     nameEl.value = ''; satEl.value = ''; dueEl.value = ''; partsEl.value = '';
+    hazRow.hidden = false;
+    hazSel.innerHTML = '<option value="">Its own set (new)</option>' +
+      S.assessments.map(x => `<option value="${x.id}">Share with: ${esc((classOf(x) || {}).name || '?')} — ${esc(x.name)}</option>`).join('');
+    hazSel.value = '';
     document.getElementById('jobModalTitle').textContent = 'New marking job';
     document.getElementById('jobSaveBtn').textContent = 'Add job';
   }
@@ -1725,7 +1772,12 @@ function saveJob() {
     const marks = {};
     cls.students.forEach(s => { marks[s.id] = newMark(); });
     const parts = names.map(n => ({ id: uid(), name: n, updatedAt: now }));
-    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, parts, marks };
+    // Own hazard set by default; share the chosen job's set if picked.
+    const share = document.getElementById('jobHazards').value;
+    const src = share && S.assessments.find(x => x.id === share);
+    const hazardSet = src ? src.hazardSet : uid();
+    if (!S.hazardSets[hazardSet]) S.hazardSets[hazardSet] = [];
+    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, hazardSet, parts, marks };
     S.assessments.push(a);
     save(); closeJobModal(); render();
     toast(`${name} added to ${cls.name}`);
@@ -1801,7 +1853,7 @@ function saveSync(cfg) { try { localStorage.setItem(SYNC_KEY, JSON.stringify(cfg
 function dataTs() {
   let mx = (S.meta && S.meta.updatedAt) || '';
   const bump = t => { if (t && t > mx) mx = t; };
-  S.tags.forEach(t => bump(t.updatedAt));
+  Object.values(S.hazardSets || {}).forEach(list => (list || []).forEach(t => bump(t.updatedAt)));
   S.classes.forEach(c => { bump(c.updatedAt); (c.students || []).forEach(s => bump(s.updatedAt)); });
   S.assessments.forEach(a => {
     bump(a.updatedAt);
@@ -1818,14 +1870,14 @@ function isDirty() { return dataTs() > (loadSync().lastSyncedTs || ''); }
 function extractDoc(s) {
   return {
     meta: { deviceId: s.meta.deviceId, updatedAt: s.meta.updatedAt || '' },
-    classes: s.classes, assessments: s.assessments, tags: s.tags,
+    classes: s.classes, assessments: s.assessments, hazardSets: s.hazardSets || {},
     tombstones: s.tombstones || {}, settings: s.settings
   };
 }
 function applyDoc(doc) {
   S.classes = doc.classes || [];
   S.assessments = doc.assessments || [];
-  S.tags = doc.tags || [];
+  S.hazardSets = doc.hazardSets || {};
   S.tombstones = doc.tombstones || {};
   S.settings = Object.assign({}, S.settings, doc.settings || {});
   if (doc.meta && doc.meta.updatedAt && doc.meta.updatedAt > (S.meta.updatedAt || '')) S.meta.updatedAt = doc.meta.updatedAt;
@@ -1850,7 +1902,17 @@ function mergeDocs(a, b) {
     return [...map.values()].filter(alive);
   };
 
-  const tags = mergeById(a.tags, b.tags, newer);
+  // Hazard sets merge by set id; within a set, tags union by id (newer name wins).
+  const hazardSets = {};
+  const mergeSet = (x, y) => {
+    const m = new Map();
+    (x || []).forEach(t => m.set(t.id, t));
+    (y || []).forEach(t => m.set(t.id, m.has(t.id) ? newer(m.get(t.id), t) : t));
+    return [...m.values()];
+  };
+  new Set([...Object.keys(a.hazardSets || {}), ...Object.keys(b.hazardSets || {})]).forEach(sid => {
+    hazardSets[sid] = mergeSet((a.hazardSets || {})[sid], (b.hazardSets || {})[sid]);
+  });
 
   const classes = mergeById(a.classes, b.classes, (x, y) => {
     const base = newer(x, y);
@@ -1888,7 +1950,7 @@ function mergeDocs(a, b) {
     deviceId: (a.meta && a.meta.deviceId) || (b.meta && b.meta.deviceId) || '',
     updatedAt: ((b.meta && b.meta.updatedAt || '') > (a.meta && a.meta.updatedAt || '')) ? b.meta.updatedAt : (a.meta && a.meta.updatedAt || '')
   };
-  return { classes, assessments, tags, tombstones, settings, meta };
+  return { classes, assessments, hazardSets, tombstones, settings, meta };
 }
 
 // Canonical serialisation so the gist content is identical whenever the data
@@ -1903,11 +1965,13 @@ function canonicalJSON(v) {
 }
 function canonicalDoc(doc) {
   const byId = (x, y) => String(x.id).localeCompare(String(y.id));
+  const sets = {};
+  Object.keys(doc.hazardSets || {}).forEach(k => { sets[k] = (doc.hazardSets[k] || []).slice().sort(byId); });
   return {
     meta: { updatedAt: (doc.meta && doc.meta.updatedAt) || '' },   // deviceId is device-local, excluded
     settings: doc.settings || {},
     tombstones: doc.tombstones || {},
-    tags: (doc.tags || []).slice().sort(byId),
+    hazardSets: sets,
     classes: (doc.classes || []).slice().sort(byId),
     assessments: (doc.assessments || []).slice().sort(byId)
   };
@@ -1917,9 +1981,17 @@ function docString(doc) { return canonicalJSON(canonicalDoc(doc)); }
 // Bring a pulled document up to the current shape (parts + part-based marks),
 // so a gist last written by an older version still merges cleanly.
 function upgradeDoc(doc) {
+  doc.hazardSets = (doc.hazardSets && typeof doc.hazardSets === 'object') ? doc.hazardSets : {};
+  if (Array.isArray(doc.tags) && doc.tags.length) {   // gist written before per-assessment sets
+    doc.hazardSets.legacy = doc.hazardSets.legacy || doc.tags.map(t => ({ id: t.id, name: t.name, updatedAt: t.updatedAt || '' }));
+    (doc.assessments || []).forEach(a => { if (!a.hazardSet) a.hazardSet = 'legacy'; });
+  }
+  delete doc.tags;
   (doc.assessments || []).forEach(a => {
     if (!Array.isArray(a.parts)) a.parts = [];
     a.marks = a.marks || {};
+    if (!a.hazardSet) a.hazardSet = uid();
+    if (!doc.hazardSets[a.hazardSet]) doc.hazardSets[a.hazardSet] = [];
     Object.keys(a.marks).forEach(sid => { a.marks[sid] = upgradeMark(a.marks[sid]); });
   });
   return doc;
