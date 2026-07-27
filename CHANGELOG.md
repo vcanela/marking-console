@@ -3,6 +3,15 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.3.1 — 2026-07-24
+
+- A follow-up can now be cleared: click the status box in the roster to send an
+  absent student back to present, or use "Will sit — clear" / "Not sitting" on
+  the paper. Clearer wording for resolving an absence.
+- Streamlined the Current Paper view: removed Prev/Next (the roster is the
+  student list), leaving a single "Next unmarked"; moved the moderation flag in
+  beside the absence controls.
+
 ## 1.3.0 — 2026-07-24
 
 - Trip hazards are now per assessment, not one global pile. Each job keeps its

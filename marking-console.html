@@ -453,7 +453,7 @@
     <span class="hdr-title" id="hdrTitle">Marking Console</span>
     <span class="hdr-meta">
       <a class="hdr-link" href="guide.html" target="_blank" rel="noopener">Guide</a>
-      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.3.0</a>
+      <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.3.1</a>
     </span>
     <div class="hdr-stats">
       <span>days left <b id="statDays">–</b></span>
@@ -599,7 +599,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.3.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.3.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1196,11 +1196,18 @@ function renderRoster() {
       ${m.flag ? '<span class="stu-flag" title="Flagged for moderation">⚑</span>' : ''}
       <span class="stu-tagcount">${n ? n + ' hazard' + (n > 1 ? 's' : '') : ''}</span>`;
     row.onclick = () => { S.ui.currentStudent = s.id; save(); render(); };
-    // The status box toggles done directly, for quick corrections.
+    // The status box toggles done; on an absent student it clears the absence
+    // (back to present), so a follow-up can be resolved right from the roster.
     const box = row.querySelector('.stu-status');
-    box.onclick = e => { e.stopPropagation(); toggleDoneFor(s.id); };
+    box.title = m.absence ? 'Clear absence (back to present)' : 'Tick / untick';
+    box.onclick = e => { e.stopPropagation(); rosterBoxClick(s.id); };
     holder.appendChild(row);
   });
+}
+function rosterBoxClick(sid) {
+  const a = curAssessment(); if (!a) return;
+  if (absent(markOf(a, sid))) { setAbsenceFor(sid, ''); return; }
+  toggleDoneFor(sid);
 }
 // Toggle a student's current-part cell done/undone (used by the roster box).
 function toggleDoneFor(sid) {
@@ -1245,23 +1252,21 @@ function renderPaper() {
   if (absent(m)) {
     const followup = m.absence === 'followup';
     const msg = followup
-      ? 'Absent on the day — follow up. Excluded from progress until they sit.'
+      ? 'Absent on the day. Resolve it: they will sit (mark it done when they do, and set a later Sat on date if needed), or they are not sitting.'
       : 'Not sitting (excused). Excluded from progress; you will not be reminded.';
     const other = followup
-      ? `<button class="btn btn-excused" onclick="setAbsence('notsitting')">Change to not sitting</button>`
-      : `<button class="btn btn-followup" onclick="setAbsence('followup')">Change to follow up</button>`;
+      ? `<button class="btn btn-excused" onclick="setAbsence('notsitting')">Not sitting</button>`
+      : `<button class="btn btn-followup" onclick="setAbsence('followup')">Move to follow up</button>`;
     holder.innerHTML = `
       <div class="paper-pos">${posLine}</div>
       <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
       <div class="paper-empty-tags" style="align-self:flex-start;">${msg}</div>
       ${satRow}
       <div class="paper-actions">
-        <button class="btn btn-done" onclick="setAbsence('')">Mark present</button>
+        <button class="btn btn-done" onclick="setAbsence('')">Will sit — clear</button>
         ${other}
       </div>
       <div class="nav-row">
-        <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
-        <button class="btn btn-nav" onclick="step(1)">Next →</button>
         <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
       </div>`;
     document.getElementById('satInput').addEventListener('change', e => {
@@ -1293,16 +1298,12 @@ function renderPaper() {
     <div class="paper-actions">
       ${doneBtn}
       <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
-      ${flagBtn}
-    </div>
-    <div class="nav-row">
-      <button class="btn btn-nav" onclick="step(-1)">← Prev</button>
-      <button class="btn btn-nav" onclick="step(1)">Next →</button>
       <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
     </div>
     <div class="absence-row">
+      ${flagBtn}
       <span class="absence-label">Absent?</span>
-      <button class="btn btn-followup" onclick="setAbsence('followup')">Absent — follow up</button>
+      <button class="btn btn-followup" onclick="setAbsence('followup')">Follow up</button>
       <button class="btn btn-excused" onclick="setAbsence('notsitting')">Not sitting</button>
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
@@ -1427,22 +1428,18 @@ function toggleFlag() {
 
 // kind: 'followup' | 'notsitting' | '' (present). Toggling the same kind clears it.
 function setAbsence(kind) {
-  const a = curAssessment(); const s = curStudent();
-  if (!a || !s) return;
-  const m = ensureMark(a, s.id);
-  m.absence = (m.absence === kind) ? '' : kind;
+  const s = curStudent();
+  if (s) setAbsenceFor(s.id, kind);
+}
+function setAbsenceFor(sid, kind) {
+  const a = curAssessment();
+  if (!a) return;
+  const m = ensureMark(a, sid);
+  m.absence = (m.absence === kind) ? '' : kind;   // toggling the same kind clears it
   m.updatedAt = nowISO();
   save(); render();
 }
 
-function step(dir) {
-  const c = curClass();
-  if (!c || !c.students.length) return;
-  let i = c.students.findIndex(s => s.id === S.ui.currentStudent);
-  i = (i + dir + c.students.length) % c.students.length;
-  S.ui.currentStudent = c.students[i].id;
-  save(); render();
-}
 // Next unmarked student within the current part; when the part is finished,
 // jump to the next part that still has unmarked papers.
 function gotoNextUnmarked() {
