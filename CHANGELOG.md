@@ -3,6 +3,17 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.4.1 — 2026-07-30
+
+- Import trip hazards from two clearly separated sources: the bank (lists you
+  prepared) and a live set (another job's working list). Importing copies the
+  hazards in, adding only ones not already there and removing nothing.
+- Import is now available in three places: creating a job, editing a job, and
+  while marking (an "Import…" control in the Trip hazards column).
+- This replaces the old linked "share a set" option with a copy: mark the first
+  class, refine its hazards, then import that live set into the second class and
+  pick up your refinements. Jobs already sharing a set keep working.
+
 ## 1.4.0 — 2026-07-30
 
 - Trip hazard bank: prepare reusable hazard lists ahead of marking (in Set up),

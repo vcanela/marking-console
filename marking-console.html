@@ -324,6 +324,26 @@
   .cls-item .bank-count { color: var(--faint); }
   .cls-item .bank-edit { margin-left: auto; background: none; border: none; color: var(--faint); font-size: 13px; }
   .cls-item .bank-edit:hover { color: var(--tag); }
+  /* Import trip hazards */
+  #importOverlay { z-index: 15; }   /* above the job/settings modals it can open over; below the toast (20) */
+  .import-list { margin-bottom: 4px; }
+  .import-empty { color: var(--faint); font-size: 12px; margin-bottom: 6px; font-style: italic; }
+  .import-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+    padding: 8px 11px; margin-bottom: 6px; border-radius: 6px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 12px;
+  }
+  .import-item:hover { border-color: var(--tag); }
+  .import-item .imp-year { color: var(--tag); }
+  .import-item .imp-count { margin-left: auto; color: var(--faint); }
+  .haz-import-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .haz-readout { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .haz-import-link {
+    margin: 8px 12px 0; font-size: 11px; padding: 6px 10px; color: var(--tag);
+    background: var(--panel-2); border: 1px solid var(--border);
+  }
+  .haz-import-link:hover { border-color: var(--tag); }
   .modal-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
   .btn-danger { color: var(--danger); }
   .btn-danger:hover { border-color: var(--danger); }
@@ -513,6 +533,7 @@
       <input id="tagInput" placeholder="New trip hazard, e.g. sig figs dropped" maxlength="80">
       <button id="tagAddBtn" title="Add trip hazard">+</button>
     </div>
+    <button class="btn haz-import-link" id="tagImportBtn">Import from bank or a live set…</button>
     <div id="tagList"></div>
   </section>
 </main>
@@ -591,13 +612,31 @@
     <textarea id="jobParts" placeholder="Section A&#10;Section B&#10;Section C"></textarea>
     <p class="sync-help" style="margin-top:-4px;">You mark one part across all students, then the next. Renaming a part keeps its marks; removing a part deletes its marks.</p>
     <div id="jobHazardsRow">
-      <label for="jobHazards">Trip hazards</label>
-      <select id="jobHazards"></select>
-      <p class="sync-help" style="margin-top:-4px;">Start from a bank list (copied in, yours to edit), share another job's live set (same test in another class), or begin empty. You can always add hazards as you mark.</p>
+      <label>Trip hazards</label>
+      <div class="haz-import-row">
+        <span id="jobHazardReadout" class="haz-readout"></span>
+        <button type="button" class="btn" id="jobImportBtn">Import trip hazards…</button>
+      </div>
+      <p class="sync-help" style="margin-top:-4px;">Import copies a list in, yours to edit; you can also add hazards as you mark. A bank list is one you prepared ahead; a live set is another job's working list.</p>
     </div>
     <div class="modal-actions">
       <button class="btn btn-done" id="jobSaveBtn">Add job</button>
       <button class="btn" id="jobCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import trip hazards modal (from the bank or another job's live set) -->
+<div class="overlay" id="importOverlay">
+  <div class="modal">
+    <h2>Import trip hazards</h2>
+    <p class="sync-help" style="margin-bottom:10px;">Copies the hazards into this job; only ones not already here are added, and nothing you have logged is removed.</p>
+    <h3>From the bank</h3>
+    <div id="importBank" class="import-list"></div>
+    <h3>From a live set (another job)</h3>
+    <div id="importLive" class="import-list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-done" id="importCloseBtn">Done</button>
     </div>
   </div>
 </div>
@@ -624,7 +663,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.4.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.4.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1438,6 +1477,73 @@ function deleteHazard(tid) {
   save(); render();
 }
 
+// ---- Import trip hazards (copy) from the bank or another job's live set ----
+// The target is either a new job's staged draft (jobHazardDraft) or an existing
+// assessment's set. Importing copies names in, adding only the ones not already
+// present (case-insensitive, ignoring deleted); it never repoints or removes.
+let importTarget = null;   // { kind:'draft' } | { kind:'assessment', id }
+function openImport(target) {
+  importTarget = target;
+  renderImport();
+  document.getElementById('importOverlay').classList.add('open');
+}
+function closeImport() {
+  document.getElementById('importOverlay').classList.remove('open');
+  importTarget = null;
+}
+function renderImport() {
+  const bankEl = document.getElementById('importBank');
+  const liveEl = document.getElementById('importLive');
+  const bank = S.hazardBank || [];
+  bankEl.innerHTML = bank.length ? '' : '<div class="import-empty">No bank lists yet. Prepare one in Set up.</div>';
+  bank.forEach(e => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'import-item';
+    b.innerHTML = `${e.year ? `<span class="imp-year">${esc(e.year)}</span>` : ''}<span>${esc(e.name)}</span><span class="imp-count">${e.hazards.length}</span>`;
+    b.onclick = () => doImport(e.hazards.map(h => h.name), e.name);
+    bankEl.appendChild(b);
+  });
+  // Live sets: other jobs' current (non-deleted) hazards. Exclude the job being
+  // imported into, dedupe jobs that already share one set, and skip empty ones.
+  const selfSet = (importTarget && importTarget.kind === 'assessment')
+    ? (S.assessments.find(x => x.id === importTarget.id) || {}).hazardSet : null;
+  const seenSets = new Set();
+  const live = S.assessments.filter(x => {
+    if (x.hazardSet === selfSet) return false;
+    if (seenSets.has(x.hazardSet)) return false;
+    seenSets.add(x.hazardSet);
+    return hazardsOf(x).length > 0;
+  });
+  liveEl.innerHTML = live.length ? '' : '<div class="import-empty">No other job has trip hazards yet.</div>';
+  live.forEach(x => {
+    const names = hazardsOf(x).map(t => t.name);
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'import-item';
+    b.innerHTML = `<span class="imp-year">${esc((classOf(x) || {}).name || '?')}</span><span>${esc(x.name)}</span><span class="imp-count">${names.length}</span>`;
+    b.onclick = () => doImport(names, x.name);
+    liveEl.appendChild(b);
+  });
+}
+function doImport(names, sourceLabel) {
+  if (!importTarget) return;
+  let added = 0;
+  if (importTarget.kind === 'draft') {
+    const have = new Set((jobHazardDraft || []).map(n => n.toLowerCase()));
+    names.forEach(n => { if (n && !have.has(n.toLowerCase())) { jobHazardDraft.push(n); have.add(n.toLowerCase()); added++; } });
+    updateJobHazardReadout();
+  } else {
+    const a = S.assessments.find(x => x.id === importTarget.id);
+    if (!a) return;
+    const set = ensureHazardSet(a);
+    const have = new Set(set.filter(t => !t.deleted).map(t => t.name.toLowerCase()));
+    const now = nowISO();
+    names.forEach(n => { if (n && !have.has(n.toLowerCase())) { set.push({ id: uid(), name: n, updatedAt: now }); have.add(n.toLowerCase()); added++; } });
+    if (added) { save(); render(); }
+    updateJobHazardReadout();   // keeps the edit-job readout in step when open
+  }
+  toast(added ? `Added ${added} trip hazard${added === 1 ? '' : 's'} from ${sourceLabel}` : 'All already present');
+}
+
 function markDone() {
   const a = curAssessment(); const c = curClass(); const s = curStudent();
   if (!a || !c || !s) return;
@@ -1803,6 +1909,7 @@ function addClass() {
 
 // ---------------- Marking jobs (assessments) ----------------
 let editingJobId = null;
+let jobHazardDraft = null;   // for a NEW job: names staged by import until the job (and its set) is created; null when editing
 function openJobModal(editId) {
   editingJobId = editId || null;
   populateJobClassSelect();
@@ -1812,39 +1919,48 @@ function openJobModal(editId) {
   const dueEl = document.getElementById('jobDue');
   const partsEl = document.getElementById('jobParts');
   const hazRow = document.getElementById('jobHazardsRow');
-  const hazSel = document.getElementById('jobHazards');
   if (editingJobId) {
     const a = S.assessments.find(x => x.id === editingJobId);
     if (!a) { editingJobId = null; return; }
+    jobHazardDraft = null;                                 // edit imports go straight into the job's real set
     sel.value = a.classId; sel.disabled = true;           // class is fixed once a job exists
     nameEl.value = a.name; satEl.value = a.dateSat || ''; dueEl.value = a.dueDate || '';
     partsEl.value = (a.parts || []).map(p => p.name).join('\n');
-    hazRow.hidden = true;                                  // hazard sharing is chosen at creation only
+    hazRow.hidden = false;
     document.getElementById('jobModalTitle').textContent = 'Edit marking job';
     document.getElementById('jobSaveBtn').textContent = 'Save changes';
   } else {
     if (!S.classes.length) { toast('Add a class in Set up first'); return; }
+    jobHazardDraft = [];                                   // fresh job: imports stage here until save
     sel.disabled = false;
     if (S.classes[0]) sel.value = S.classes[0].id;
     nameEl.value = ''; satEl.value = ''; dueEl.value = ''; partsEl.value = '';
     hazRow.hidden = false;
-    const bankOpts = (S.hazardBank || []).map(e =>
-      `<option value="bank:${e.id}">${esc((e.year ? e.year + ' · ' : '') + e.name)} (${e.hazards.length})</option>`).join('');
-    const shareOpts = S.assessments.map(x =>
-      `<option value="share:${x.id}">${esc((classOf(x) || {}).name || '?')} — ${esc(x.name)}</option>`).join('');
-    hazSel.innerHTML = '<option value="">Empty (build as you mark)</option>'
-      + (bankOpts ? `<optgroup label="Seed from bank (copy)">${bankOpts}</optgroup>` : '')
-      + (shareOpts ? `<optgroup label="Share a live set (same test)">${shareOpts}</optgroup>` : '');
-    hazSel.value = '';
     document.getElementById('jobModalTitle').textContent = 'New marking job';
     document.getElementById('jobSaveBtn').textContent = 'Add job';
   }
+  updateJobHazardReadout();
   document.getElementById('jobOverlay').classList.add('open');
   nameEl.focus();
+}
+// How many hazards the job will have: the staged draft for a new job, or the
+// job's own live set when editing.
+function updateJobHazardReadout() {
+  const el = document.getElementById('jobHazardReadout');
+  if (!el) return;
+  let n;
+  if (editingJobId) {
+    const a = S.assessments.find(x => x.id === editingJobId);
+    n = a ? hazardsOf(a).length : 0;
+  } else {
+    n = (jobHazardDraft || []).length;
+  }
+  el.textContent = n ? `${n} trip hazard${n === 1 ? '' : 's'}` : 'None yet';
 }
 function closeJobModal() {
   document.getElementById('jobOverlay').classList.remove('open');
   editingJobId = null;
+  jobHazardDraft = null;
 }
 function parsePartNames() {
   return document.getElementById('jobParts').value.split('\n').map(l => l.trim()).filter(Boolean);
@@ -1900,21 +2016,9 @@ function saveJob() {
     const marks = {};
     cls.students.forEach(s => { marks[s.id] = newMark(); });
     const parts = names.map(n => ({ id: uid(), name: n, updatedAt: now }));
-    // Trip hazards: empty by default; seed a copy from a bank entry, or share
-    // another job's live set, depending on the picker.
-    const pick = document.getElementById('jobHazards').value;
-    let hazardSet;
-    if (pick.indexOf('share:') === 0) {
-      const src = S.assessments.find(x => x.id === pick.slice(6));
-      hazardSet = src ? src.hazardSet : uid();
-    } else if (pick.indexOf('bank:') === 0) {
-      const entry = (S.hazardBank || []).find(e => e.id === pick.slice(5));
-      hazardSet = uid();
-      S.hazardSets[hazardSet] = (entry ? entry.hazards : []).map(h => ({ id: uid(), name: h.name, updatedAt: now }));   // fresh ids: an independent copy
-    } else {
-      hazardSet = uid();
-    }
-    if (!S.hazardSets[hazardSet]) S.hazardSets[hazardSet] = [];
+    // Trip hazards: its own new set, built from any names staged by import.
+    const hazardSet = uid();
+    S.hazardSets[hazardSet] = (jobHazardDraft || []).map(nm => ({ id: uid(), name: nm, updatedAt: now }));
     const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, hazardSet, parts, marks };
     S.assessments.push(a);
     save(); closeJobModal(); render();
@@ -2269,6 +2373,10 @@ document.getElementById('bankCancelBtn').onclick = cancelBankEdit;
 document.getElementById('jobSaveBtn').onclick = saveJob;
 document.getElementById('jobCancelBtn').onclick = closeJobModal;
 document.getElementById('jobOverlay').addEventListener('click', e => { if (e.target.id === 'jobOverlay') closeJobModal(); });
+document.getElementById('jobImportBtn').onclick = () => openImport(editingJobId ? { kind: 'assessment', id: editingJobId } : { kind: 'draft' });
+document.getElementById('tagImportBtn').onclick = () => { const a = curAssessment(); if (!a) { toast('Open a marking job first'); return; } openImport({ kind: 'assessment', id: a.id }); };
+document.getElementById('importCloseBtn').onclick = closeImport;
+document.getElementById('importOverlay').addEventListener('click', e => { if (e.target.id === 'importOverlay') closeImport(); });
 document.getElementById('followupCloseBtn').onclick = closeFollowup;
 document.getElementById('followupOverlay').addEventListener('click', e => { if (e.target.id === 'followupOverlay') closeFollowup(); });
 document.getElementById('tagAddBtn').onclick = addTag;

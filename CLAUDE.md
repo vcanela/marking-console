@@ -170,9 +170,7 @@ current part differ per device) and is excluded from the synced document.
    **Copy hazard summary** button), coloured purple to tie to the Trip hazards
    column. **Per assessment**, not global: each assessment points at a hazard
    set in `S.hazardSets` (`hazardsOf`/`ensureHazardSet`), so the sidebar,
-   counts and summary are that assessment's own. Two jobs can **share** a set
-   (the same test in another class) — chosen from the job modal at creation
-   (`hazardSet` copied from the picked job). Hazards attach to the current
+   counts and summary are that assessment's own. Hazards attach to the current
    **cell** (student-part); clicking a sidebar hazard toggles it; adding a new
    one auto-attaches it. Sidebar sorts by frequency within the current part.
    `tagName(a, tid)` resolves within the assessment's set. Migration: the old
@@ -185,12 +183,23 @@ current part differ per device) and is excluded from the synced document.
    **Hazard bank** (`S.hazardBank`, edited in Set up: `renderHazardBank`,
    `saveBankEntry`, `editBankEntry`, `deleteBankEntry`): reusable named lists
    labelled by assessment name and optional year level, prepared ahead of
-   marking from the schedule. The job modal's hazard picker offers three
-   starts, encoded as prefixed option values parsed in `saveJob`: empty (own
-   new set), `bank:<id>` (seed a **copy** with fresh tag ids, so editing the
-   job never touches the bank), or `share:<id>` (share another job's live set).
-   The bank holds no student data, so it syncs; bank entries carry `updatedAt`
-   and delete via `tombstones` like classes/assessments.
+   marking from the schedule. The bank holds no student data, so it syncs; bank
+   entries carry `updatedAt` and delete via `tombstones` like
+   classes/assessments.
+   **Import** (`openImport`/`renderImport`/`doImport`, the `#importOverlay`
+   modal): brings hazards into a job by **copy**, from two clearly separated
+   sources: **the bank** and a **live set** (another job's current non-deleted
+   hazards). Importing is additive: it adds only names not already present
+   (case-insensitive, ignoring deleted) and never repoints or removes. It is
+   reachable from three places, all sharing the modal: creating a job (staged
+   into `jobHazardDraft`, an array of names built into the new set in `saveJob`),
+   editing a job (straight into the job's real set), and while marking (the
+   `#tagImportBtn` control in the Trip hazards column). `importTarget` routes to
+   the draft or an assessment. This replaced the old linked "share a set"
+   option; two jobs pointing at one `hazardSet` id still work, but new setups
+   are copies, so the workflow is: mark class 1, refine, then import class 1's
+   live set into class 2 to carry the refinements across (each class keeps its
+   own frequencies).
 7. **Feedback prompt export** (`copyPrompt`): clipboard text with first name,
    class, assessment name, and the student's tagged issues and notes gathered
    across every part (grouped by part name when multi-part), plus fixed
@@ -293,9 +302,11 @@ names, a single-part job (mark/un-tick, absence follow-up vs not-sitting,
 hazard toggle), a
 multi-part job (part bar, mark a part across students, auto-jump to the next
 part, per-part hazard counts), un-ticking from the roster box, the hazard bank
-(add a bank list in Set up, seed a new job from it and confirm the copy is
-independent of the bank), deleting a hazard while marking (it clears from every
-paper and does not resurrect on sync), flagging a
+(add a bank list in Set up), importing hazards (from the bank and from a live
+set, at job creation, on edit, and while marking; confirm it is an additive
+copy that stays independent of the source and dedupes on re-import), deleting a
+hazard while marking (it clears from every paper and does not resurrect on
+sync), flagging a
 student for moderation with a comment, the daily quota bar filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with

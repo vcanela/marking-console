@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.4.0</span>
+    <span class="ver" id="ver">Guide · v1.4.1</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -132,7 +132,7 @@
   <span class="lab">In the app</span>
   <p>In the <b class="h">Trip hazards</b> column on the right, type the mistake once, then click it on each paper where you see it. The list sorts by how often you have logged it in the section you are marking, so the common slips rise to the top as you go.</p>
   <p><b class="i">Copy hazard summary</b> gives you the frequency table to plan the reteach. Keep the wording consistent, for example always "sig figs dropped" rather than a new phrasing each time, so the counts stay meaningful and, later, transfer cleanly into your question bank.</p>
-  <p>Each job keeps its own set of trip hazards, so different assessments stay uncluttered. When the same test is sat by another class, choose to share that job's hazard set as you create the second job, and their frequencies combine.</p>
+  <p>Each job keeps its own set of trip hazards, so different assessments stay uncluttered. When the same test is sat by another class, use <b class="h">Import trip hazards…</b> and pick that job's list under <b class="k">From a live set</b>; the hazards copy across while each class keeps its own frequencies. See <b class="k">Hazards ready before you start</b>.</p>
   <p>Added a hazard by mistake, or worded one twice? Hover a hazard in the list and click the small <b class="h">×</b> to delete it; it is removed from every paper that had logged it. To prepare hazards before you even open the first paper, see <b class="k">Hazards ready before you start</b>.</p>
 </section>
 
@@ -143,8 +143,8 @@
   <span class="lab">Prepare the list</span>
   <p>In <b class="k">Set up</b>, under <b class="h">Trip hazard bank</b>, add a list: give it the assessment name, an optional year level, and one hazard per line. An AI can help here: paste your marking schedule or model answers into it and ask for a short list of the <i>general</i> mistakes students are likely to make (not anything about individual students), then paste those in. Keep the wording plain and consistent, the same phrasing you would use while marking.</p>
   <span class="lab">Use it when marking</span>
-  <p>When you create the job, pick your list under <b class="h">Trip hazards</b> and the hazards are there from the first paper, ready to click. The job takes its own copy: adding or deleting hazards while you mark changes only that job, never the bank. So the bank stays a clean canonical list you tweak rarely, while each class's marking stays its own.</p>
-  <p>Sitting the same test with a second class next week? Seed that job from the same bank list too. Each class keeps its own frequencies, both grown from the same starting vocabulary.</p>
+  <p>Click <b class="h">Import trip hazards…</b> when you create the job, and pick your list under <b class="k">From the bank</b>. The hazards are there from the first paper, ready to click. The job takes its own copy: adding or deleting hazards while you mark changes only that job, never the bank. So the bank stays a clean canonical list you tweak rarely, while each class's marking stays its own. You can also import later, from <b class="k">Edit marking job</b> or with the <b class="h">Import…</b> control in the Trip hazards column while marking.</p>
+  <p>Sitting the same test with a second class? Mark the first class and refine its hazards as you go. Then, for the second class, import doesn't only offer the bank: under <b class="k">From a live set</b> you can pick the first class's actual working list and bring your refinements straight across. Each class still keeps its own frequencies; only the list of hazards is copied.</p>
 </section>
 
 <section data-view="feedback" class="detail" hidden>
@@ -211,6 +211,13 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.4.1 — 2026-07-30</div>
+    <ul>
+      <li>Import trip hazards from two clear sources, the bank and a live set (another job); available when creating a job, editing one, and while marking.</li>
+      <li>Importing copies the hazards in (adds only new ones), so you can refine one class's list and carry it to the next.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.4.0 — 2026-07-30</div>
     <ul>
