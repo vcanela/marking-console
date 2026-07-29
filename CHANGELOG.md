@@ -3,6 +3,17 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.4.0 — 2026-07-30
+
+- Trip hazard bank: prepare reusable hazard lists ahead of marking (in Set up),
+  each labelled by assessment name and optional year level, from the marking
+  schedule. When you create a job you can seed it from a bank list; the job gets
+  its own copy, so editing it while marking never changes the bank.
+- You can now delete a trip hazard while marking: each hazard in the sidebar has
+  a delete control; removing one clears it from every paper that logged it.
+- The job's trip-hazard picker now offers three starts: empty, seed a copy from
+  the bank, or share another job's live set (same test in another class).
+
 ## 1.3.1 — 2026-07-24
 
 - A follow-up can now be cleared: click the status box in the roster to send an

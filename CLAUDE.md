@@ -113,8 +113,9 @@ S = {
       }
     }
   }],
-  hazardSets: { [setId]: [{ id, name, updatedAt }] },  // per-assessment trip-hazard sets; assessments may share a set
-  tombstones: { [id]: deletedAtISO },// deleted class/assessment ids, so a merge cannot resurrect them
+  hazardSets: { [setId]: [{ id, name, deleted, updatedAt }] },  // per-assessment trip-hazard sets; assessments may share a set; deleted is a soft-delete tombstone (see behaviour 6)
+  hazardBank: [{ id, name, year, hazards: [{ id, name }], updatedAt }],  // reusable hazard lists prepared ahead of marking; seeded into a job's set by copy, no student data
+  tombstones: { [id]: deletedAtISO },// deleted class/assessment/bank-entry ids, so a merge cannot resurrect them
   ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort },  // device-local; NOT synced
   settings: {}   // currently unused
 }
@@ -176,6 +177,20 @@ current part differ per device) and is excluded from the synced document.
    one auto-attaches it. Sidebar sorts by frequency within the current part.
    `tagName(a, tid)` resolves within the assessment's set. Migration: the old
    global `tags` becomes one shared `legacy` set kept by existing assessments.
+   A hazard can be **deleted while marking** (`deleteHazard`, a delete control
+   on each sidebar row): this is a **soft delete** (`t.deleted = true` with a
+   fresh `updatedAt`), not a splice, so a sync merge (which unions tags by id)
+   cannot resurrect it; `hazardsOf` filters `deleted` out and the tag is
+   stripped from every cell that logged it.
+   **Hazard bank** (`S.hazardBank`, edited in Set up: `renderHazardBank`,
+   `saveBankEntry`, `editBankEntry`, `deleteBankEntry`): reusable named lists
+   labelled by assessment name and optional year level, prepared ahead of
+   marking from the schedule. The job modal's hazard picker offers three
+   starts, encoded as prefixed option values parsed in `saveJob`: empty (own
+   new set), `bank:<id>` (seed a **copy** with fresh tag ids, so editing the
+   job never touches the bank), or `share:<id>` (share another job's live set).
+   The bank holds no student data, so it syncs; bank entries carry `updatedAt`
+   and delete via `tombstones` like classes/assessments.
 7. **Feedback prompt export** (`copyPrompt`): clipboard text with first name,
    class, assessment name, and the student's tagged issues and notes gathered
    across every part (grouped by part name when multi-part), plus fixed
@@ -199,7 +214,8 @@ current part differ per device) and is excluded from the synced document.
     a backup. Sync is pull, merge, push in one action (`syncNow`); the merge
     (`mergeDocs`) is deterministic, commutative and idempotent, combining both
     sides by per-entity/per-cell `updatedAt` (hazard sets merge by set id, tags
-    within a set by `updatedAt`) with tombstones for deletions, so
+    within a set by `updatedAt`; hazard-bank entries merge by id, newer entry
+    wins wholesale, deleted via tombstones) with tombstones for deletions, so
     two devices converge with no data loss and no forced conflict choice (mark
     Section A on one device and Section B on another and both survive).
     Auto-sync runs on open and debounced after edits; a header button and a Set
@@ -276,7 +292,10 @@ setup (add a class, then an assessment), roster paste with duplicate first
 names, a single-part job (mark/un-tick, absence follow-up vs not-sitting,
 hazard toggle), a
 multi-part job (part bar, mark a part across students, auto-jump to the next
-part, per-part hazard counts), un-ticking from the roster box, flagging a
+part, per-part hazard counts), un-ticking from the roster box, the hazard bank
+(add a bank list in Set up, seed a new job from it and confirm the copy is
+independent of the bank), deleting a hazard while marking (it clears from every
+paper and does not resurrect on sync), flagging a
 student for moderation with a comment, the daily quota bar filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
