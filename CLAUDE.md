@@ -248,6 +248,20 @@ current part differ per device) and is excluded from the synced document.
     sits high on the dashboard and shows once when the quota is met. Keep the
     quotes literary and unfussy: no self-help, no exclamation marks. (No archive
     yet: completed jobs sink to the bottom of the list.)
+14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
+    a **forward** heat strip. For each active dated job it spreads
+    `remaining + markedToday` evenly across `dl` (days-left) and sums per day, so
+    it is the daily-quota maths projected across the whole horizon; the first
+    square agrees with Today's quota. Horizon runs today to the last due date,
+    clamped to [14, 35] days. Shade is `ceil(load/max * 4)` (relative to the
+    busiest day) over a `color-mix` ramp of `--accent` (a single-hue sequential
+    scale, kept clear of `--danger`); today and each due date are ringed, weekends
+    get a faint tick. Hover shows a `title`; click/tap sets a caption
+    (`runwayPick`, mobile-friendly). Per-day cells are split across jobs by
+    largest-remainder (`allocateCells`) so the parts always sum to the day total.
+    It is deliberately a standing suggestion, not a target: it recomputes from
+    live stats, so resting a day (remaining unchanged, `dl` down one) raises the
+    later squares. Hidden when no dated active job exists.
 
 ## Design language
 
@@ -307,7 +321,9 @@ set, at job creation, on edit, and while marking; confirm it is an additive
 copy that stays independent of the source and dedupes on re-import), deleting a
 hazard while marking (it clears from every paper and does not resurrect on
 sync), flagging a
-student for moderation with a comment, the daily quota bar filling and turning
+student for moderation with a comment, the marking runway (dated jobs shade a
+forward strip, per-day parts sum to the day total, hover/tap caption, hides with
+no dated jobs), the daily quota bar filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
 only the older key present),

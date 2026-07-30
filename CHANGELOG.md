@@ -3,6 +3,16 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.5.0 — 2026-07-30
+
+- Marking runway on the dashboard: a forward heat strip of the coming days, each
+  square shaded by how many cells you would mark that day to keep a flat load to
+  every deadline (the same maths as Today's quota, projected across the whole
+  horizon). Near days run hottest where deadlines overlap; the strip cools as
+  each due date passes. Today and each due date are ringed; hover or tap a day
+  for its load and which jobs drive it. It is a standing suggestion, not a
+  target: rest a day and the remaining squares quietly rise.
+
 ## 1.4.1 — 2026-07-30
 
 - Import trip hazards from two clearly separated sources: the bank (lists you

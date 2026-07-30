@@ -396,6 +396,30 @@
   .progress-track.sm { height: 7px; border-radius: 4px; }
   .quota-empty { color: var(--faint); font-size: 12px; line-height: 1.6; }
 
+  /* Marking runway: forward heat strip of projected load per day. */
+  .runway { display: flex; gap: 3px; overflow-x: auto; padding: 3px 0 8px; }
+  .rw-cell {
+    position: relative; flex: 0 0 auto; width: 15px; height: 15px; padding: 0;
+    border: none; border-radius: 3px; cursor: pointer; background: var(--panel-2);
+  }
+  .rw-l0 { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); }
+  .rw-l1 { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+  .rw-l2 { background: color-mix(in srgb, var(--accent) 48%, transparent); }
+  .rw-l3 { background: color-mix(in srgb, var(--accent) 72%, transparent); }
+  .rw-l4 { background: var(--accent); }
+  .rw-today { box-shadow: 0 0 0 2px var(--text); }
+  .rw-due { box-shadow: 0 0 0 2px var(--info); }
+  .rw-today.rw-due { box-shadow: 0 0 0 2px var(--info), 0 0 0 4px var(--text); }
+  .rw-weekend::after {
+    content: ''; position: absolute; left: 25%; right: 25%; bottom: -4px;
+    height: 2px; border-radius: 1px; background: var(--faint);
+  }
+  .runway-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 4px; flex-wrap: wrap; }
+  .runway-legend { display: inline-flex; align-items: center; gap: 3px; }
+  .rw-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; }
+  .runway-caption { font-size: 12px; color: var(--muted); margin-top: 9px; min-height: 1.3em; line-height: 1.5; }
+
   .dash-jobs-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sort-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .sort-opt { background: none; border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 4px 10px; }
@@ -663,7 +687,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.4.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.5.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1051,6 +1075,8 @@ function renderDashboard() {
       ${quotaRowsHtml(list)}
     </section>
 
+    ${runwayHtml(list)}
+
     <div class="dash-quote">${esc(quoteLine(0))}</div>
 
     <section class="dash-tiles">
@@ -1096,6 +1122,85 @@ function quotaRowsHtml(list) {
   }).join('');
 }
 function setJobSort(mode) { S.ui.jobSort = mode; save(); render(); }
+
+// Marking runway: a forward heat strip. For each active dated job, spread its
+// remaining cells evenly across its days-left (the same constant-load figure as
+// the daily quota), then sum per day. Near days run hottest because several
+// deadlines overlap there; the strip cools as each due date passes. It is a
+// standing suggestion, not a target: rest a day and, since remaining stays but
+// days-left drops, tomorrow's squares quietly rise.
+let runwayDays = [];   // per-day detail for the click/tap caption, kept in step with the rendered strip
+function runwayHtml(list) {
+  const jobs = list.filter(x => !x.complete && !x.upcoming && x.a.dueDate && x.dl > 0 && (x.remaining + x.markedToday) > 0);
+  if (!jobs.length) { runwayDays = []; return ''; }
+  const maxIdx = Math.max(...jobs.map(x => x.dl - 1));
+  const H = Math.min(35, Math.max(14, maxIdx + 1));       // clamp: at least a fortnight, at most five weeks
+  const capped = (maxIdx + 1) > H;
+  const base = new Date(); base.setHours(12, 0, 0, 0);
+  const days = [];
+  for (let i = 0; i < H; i++) {
+    const d = new Date(base); d.setDate(base.getDate() + i);
+    days.push({ date: d, load: 0, jobs: [], due: false });
+  }
+  jobs.forEach(x => {
+    const rate = (x.remaining + x.markedToday) / x.dl;
+    for (let i = 0; i < x.dl && i < H; i++) {
+      days[i].load += rate;
+      days[i].jobs.push({ name: (x.cls ? x.cls.name + ' ' : '') + x.a.name, cells: rate });
+    }
+    if (x.dl - 1 < H) days[x.dl - 1].due = true;
+  });
+  const max = Math.max(...days.map(d => d.load), 0);
+  runwayDays = days.map(d => {
+    const total = d.load > 0 ? Math.max(1, Math.round(d.load)) : 0;   // a shaded day never reads as 0
+    const alloc = allocateCells(total, d.jobs.map(j => j.cells));      // split so the parts sum to the day total
+    return {
+      label: d.date.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }),
+      cells: total, due: d.due,
+      jobs: d.jobs.map((j, k) => ({ name: j.name, cells: alloc[k] })).filter(j => j.cells > 0)
+    };
+  });
+  const cells = days.map((d, i) => {
+    const lvl = d.load <= 0 ? 0 : Math.min(4, Math.ceil((d.load / max) * 4));
+    const dow = d.date.getDay();
+    const cl = ['rw-cell', 'rw-l' + lvl];
+    if (i === 0) cl.push('rw-today');
+    if (d.due) cl.push('rw-due');
+    if (dow === 0 || dow === 6) cl.push('rw-weekend');
+    const rd = runwayDays[i];
+    const title = `${rd.label}: ${rd.cells} cell${rd.cells === 1 ? '' : 's'}${d.due ? ' · due date' : ''}`;
+    return `<button class="${cl.join(' ')}" title="${esc(title)}" onclick="runwayPick(${i})"></button>`;
+  }).join('');
+  return `
+    <section class="dash-section">
+      <div class="dash-h">Marking runway</div>
+      <div class="dash-bigsub" style="margin-bottom:10px;">Each day from today to your last deadline, if you keep the load flat. Rest a day and the rest quietly rise.</div>
+      <div class="runway" role="img" aria-label="Projected marking load per day">${cells}</div>
+      <div class="runway-foot">
+        <span>${esc(runwayDays[0].label)} → ${esc(runwayDays[H - 1].label)}${capped ? ' · later deadlines continue past the edge' : ''}</span>
+        <span class="runway-legend">quieter<span class="rw-swatch rw-l1"></span><span class="rw-swatch rw-l2"></span><span class="rw-swatch rw-l3"></span><span class="rw-swatch rw-l4"></span>heavier</span>
+      </div>
+      <div class="runway-caption" id="runwayCaption">Hover or tap a day to see its load.</div>
+    </section>`;
+}
+// Split an integer total across jobs in proportion to their daily rates, by the
+// largest-remainder method, so the per-job figures always sum to the day total.
+function allocateCells(total, weights) {
+  if (total <= 0 || !weights.length) return weights.map(() => 0);
+  const sum = weights.reduce((a, b) => a + b, 0) || 1;
+  const raw = weights.map(w => w / sum * total);
+  const out = raw.map(Math.floor);
+  let rem = total - out.reduce((a, b) => a + b, 0);
+  raw.map((r, i) => ({ i, frac: r - Math.floor(r) })).sort((a, b) => b.frac - a.frac)
+    .forEach(o => { if (rem > 0) { out[o.i]++; rem--; } });
+  return out;
+}
+function runwayPick(i) {
+  const d = runwayDays[i]; if (!d) return;
+  const el = document.getElementById('runwayCaption'); if (!el) return;
+  const parts = d.jobs.length ? d.jobs.map(j => `${esc(j.name)} ${j.cells}`).join(' · ') : 'nothing due';
+  el.innerHTML = `<b>${esc(d.label)}</b>${d.due ? ' (a due date)' : ''}: ${d.cells} cell${d.cells === 1 ? '' : 's'} — ${parts}`;
+}
 
 // Shown on the dashboard only until the first marking job exists; it then
 // disappears on its own. Points newcomers at the guide without nagging.
