@@ -255,9 +255,11 @@ current part differ per device) and is excluded from the synced document.
     square agrees with Today's quota. Horizon runs today to the last due date,
     clamped to [14, 35] days. Shade is `ceil(load/max * 4)` (relative to the
     busiest day) over a `color-mix` ramp of `--accent` (a single-hue sequential
-    scale, kept clear of `--danger`); today and each due date are ringed, weekends
-    get a faint tick. Hover shows a `title`; click/tap sets a caption
-    (`runwayPick`, mobile-friendly). Per-day cells are split across jobs by
+    scale, kept clear of `--danger`); today is ringed, each due date carries a
+    `--info` dot above the square, and weekends render as smaller centred squares
+    (an inner `.rw-sq` holds the shade so its size can change). Hover shows a
+    `title`; click/tap toggles a caption open and shut (`runwayPick`/`runwayPicked`,
+    mobile-friendly). Per-day cells are split across jobs by
     largest-remainder (`allocateCells`) so the parts always sum to the day total.
     It is deliberately a standing suggestion, not a target: it recomputes from
     live stats, so resting a day (remaining unchanged, `dl` down one) raises the

@@ -3,6 +3,13 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.5.1 — 2026-07-30
+
+- Marking runway polish: weekends now read as smaller centred squares (clearer
+  than the old underline); deadlines are marked with a dot above the square
+  instead of a coloured outline; tapping a day toggles its summary open and
+  shut; and the strip no longer clips at the left edge.
+
 ## 1.5.0 — 2026-07-30
 
 - Marking runway on the dashboard: a forward heat strip of the coming days, each
