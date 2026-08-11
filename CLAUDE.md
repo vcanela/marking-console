@@ -264,6 +264,17 @@ current part differ per device) and is excluded from the synced document.
     It is deliberately a standing suggestion, not a target: it recomputes from
     live stats, so resting a day (remaining unchanged, `dl` down one) raises the
     later squares. Hidden when no dated active job exists.
+15. **Keyboard shortcuts** (`onHotkey`, one global `keydown` listener; desktop):
+    bare single keys, in the spirit of the lesson planner. Ignored while typing
+    (input/textarea/select/contentEditable) and when any Ctrl/Cmd/Alt is held, so
+    text entry is untouched. `Esc` steps out of a focused field (`blur`), else
+    closes the topmost open overlay (`closeTopOverlay`). Action keys fire only in
+    the workspace and never while a dialog is open: `Enter` = `markDone`, `]`/`[`
+    = `stepStudent(±1)`, `n` = `gotoNextUnmarked`, `u` = `unmarkCell`, `f` =
+    `toggleFlag`; anywhere: `?` opens the cheat-sheet (`#hotkeyOverlay`, also the
+    header **Keys** link), `d` = `goDashboard`. Trip hazards and parts are
+    deliberately not hotkeyed (a long/short click list; keeps the set small). The
+    notes box does not autofocus, so keys are live on arrival at a paper.
 
 ## Design language
 
@@ -325,7 +336,9 @@ hazard while marking (it clears from every paper and does not resurrect on
 sync), flagging a
 student for moderation with a comment, the marking runway (dated jobs shade a
 forward strip, per-day parts sum to the day total, hover/tap caption, hides with
-no dated jobs), the daily quota bar filling and turning
+no dated jobs), the keyboard shortcuts (Enter marks and advances, [ ] step
+students, ? opens the sheet, Esc blurs the notes box then keys work again, keys
+paused while typing), the daily quota bar filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
 only the older key present),

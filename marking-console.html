@@ -71,7 +71,8 @@
   .hdr-top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
   .hdr-title { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
   .hdr-meta { display: inline-flex; gap: 10px; align-items: baseline; }
-  .hdr-link { font-family: var(--mono); font-size: 11px; color: var(--faint); text-decoration: none; }
+  .hdr-link { font-family: var(--mono); font-size: 11px; color: var(--faint); text-decoration: none;
+    background: none; border: none; padding: 0; cursor: pointer; }
   .hdr-link:hover { color: var(--info); text-decoration: underline; }
   .hdr-stats { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
   .hdr-stats b { color: var(--text); font-weight: 600; }
@@ -421,6 +422,14 @@
   .rw-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; }
   .runway-caption { font-size: 12px; color: var(--muted); margin-top: 9px; min-height: 1.3em; line-height: 1.5; }
 
+  /* Keyboard shortcuts cheat-sheet */
+  kbd { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 7px; margin: 0 2px 2px 0; color: var(--text); }
+  .hk-table { width: 100%; border-collapse: collapse; }
+  .hk-table td { padding: 5px 0; font-size: 13px; color: var(--muted); vertical-align: top; line-height: 1.5; }
+  .hk-table td:first-child { white-space: nowrap; width: 108px; padding-right: 12px; }
+
   .dash-jobs-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .sort-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .sort-opt { background: none; border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 4px 10px; }
@@ -509,6 +518,7 @@
     <span class="hdr-title" id="hdrTitle">Marking Console</span>
     <span class="hdr-meta">
       <a class="hdr-link" href="guide.html" target="_blank" rel="noopener">Guide</a>
+      <button class="hdr-link" id="keysBtn" title="Keyboard shortcuts (press ?)">Keys</button>
       <a class="hdr-link hdr-ver" id="verLink" href="guide.html#changelog" target="_blank" rel="noopener" title="What's new">v1.3.1</a>
     </span>
     <div class="hdr-stats">
@@ -666,6 +676,31 @@
   </div>
 </div>
 
+<!-- Keyboard shortcuts cheat-sheet -->
+<div class="overlay" id="hotkeyOverlay">
+  <div class="modal">
+    <h2>Keyboard shortcuts</h2>
+    <h3>Anywhere</h3>
+    <table class="hk-table"><tbody>
+      <tr><td><kbd>?</kbd></td><td>Show this list</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Step out of a text box, or close a dialog</td></tr>
+      <tr><td><kbd>d</kbd></td><td>Go to the dashboard</td></tr>
+    </tbody></table>
+    <h3>While marking a paper</h3>
+    <table class="hk-table"><tbody>
+      <tr><td><kbd>Enter</kbd></td><td>Mark done, jump to the next unmarked</td></tr>
+      <tr><td><kbd>]</kbd> <kbd>[</kbd></td><td>Next / previous student</td></tr>
+      <tr><td><kbd>n</kbd></td><td>Skip to the next unmarked paper</td></tr>
+      <tr><td><kbd>u</kbd></td><td>Un-mark this paper</td></tr>
+      <tr><td><kbd>f</kbd></td><td>Flag for moderation</td></tr>
+    </tbody></table>
+    <p class="sync-help" style="margin-top:12px;">Shortcuts pause while you are typing. Press <kbd>Esc</kbd> to leave the notes box and use them again.</p>
+    <div class="modal-actions">
+      <button class="btn btn-done" id="hotkeyCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Follow-up students popup -->
 <div class="overlay" id="followupOverlay">
   <div class="modal">
@@ -688,7 +723,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.5.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.6.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1297,6 +1332,52 @@ function selectPart(pid) {
 function goDashboard() {
   S.ui.view = 'dashboard';
   save(); render();
+}
+
+// Move the selected paper one student along the roster (for the [ ] hotkeys).
+function stepStudent(dir) {
+  const c = curClass(); if (!c || !c.students.length) return;
+  const studs = c.students;
+  let i = studs.findIndex(s => s.id === S.ui.currentStudent);
+  if (i < 0) i = dir > 0 ? -1 : studs.length;   // no selection yet: first step lands on an end
+  const ni = Math.min(studs.length - 1, Math.max(0, i + dir));
+  if (ni === i) return;
+  S.ui.currentStudent = studs[ni].id;
+  save(); render();
+}
+
+function openHotkeys() { document.getElementById('hotkeyOverlay').classList.add('open'); }
+function closeHotkeys() { document.getElementById('hotkeyOverlay').classList.remove('open'); }
+// Esc closes the topmost open overlay; order matters (stacked ones first).
+function closeTopOverlay() {
+  const close = { hotkeyOverlay: closeHotkeys, importOverlay: closeImport, jobOverlay: closeJobModal, followupOverlay: closeFollowup, settingsOverlay: closeSettings };
+  for (const id of Object.keys(close)) {
+    if (document.getElementById(id).classList.contains('open')) { close[id](); return true; }
+  }
+  return false;
+}
+// Bare-key shortcuts (desktop), mirroring the lesson planner: ignored while
+// typing so text entry is untouched; Esc steps out of a field or closes a
+// dialog; action keys fire only in the workspace and never behind a dialog.
+function onHotkey(e) {
+  const k = e.key;
+  const ae = document.activeElement;
+  const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable);
+  if (k === 'Escape') {
+    if (typing) { ae.blur(); e.preventDefault(); return; }   // hand control back to the hotkeys
+    if (closeTopOverlay()) e.preventDefault();
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey || typing) return;
+  if (document.querySelector('.overlay.open')) return;       // a dialog swallows action keys
+  if (k === '?') { openHotkeys(); e.preventDefault(); return; }
+  if (k === 'd' || k === 'D') { goDashboard(); e.preventDefault(); return; }
+  if (S.ui.view !== 'workspace') return;
+  const acts = {
+    'Enter': markDone, ']': () => stepStudent(1), '[': () => stepStudent(-1),
+    'n': gotoNextUnmarked, 'N': gotoNextUnmarked, 'u': unmarkCell, 'U': unmarkCell, 'f': toggleFlag, 'F': toggleFlag
+  };
+  if (acts[k]) { acts[k](); e.preventDefault(); }
 }
 
 // Open an assessment focused on a specific student (used by the follow-up list).
@@ -2490,6 +2571,10 @@ document.getElementById('importCloseBtn').onclick = closeImport;
 document.getElementById('importOverlay').addEventListener('click', e => { if (e.target.id === 'importOverlay') closeImport(); });
 document.getElementById('followupCloseBtn').onclick = closeFollowup;
 document.getElementById('followupOverlay').addEventListener('click', e => { if (e.target.id === 'followupOverlay') closeFollowup(); });
+document.getElementById('keysBtn').onclick = openHotkeys;
+document.getElementById('hotkeyCloseBtn').onclick = closeHotkeys;
+document.getElementById('hotkeyOverlay').addEventListener('click', e => { if (e.target.id === 'hotkeyOverlay') closeHotkeys(); });
+document.addEventListener('keydown', onHotkey);
 document.getElementById('tagAddBtn').onclick = addTag;
 document.getElementById('tagInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTag(); });
 document.getElementById('classSummaryBtn').onclick = copyAssessmentSummary;

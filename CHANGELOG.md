@@ -3,6 +3,16 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.6.0 — 2026-07-30
+
+- Keyboard shortcuts for faster marking (desktop). While marking a paper:
+  Enter marks done and jumps to the next unmarked, `]` / `[` step between
+  students, `n` skips to the next unmarked, `u` un-marks, `f` flags for
+  moderation. Anywhere: `?` shows the list, `d` goes to the dashboard, Esc
+  closes a dialog. A "Keys" link in the header opens the cheat-sheet too.
+- Shortcuts pause while you type, so writing notes is untouched; press Esc to
+  step out of the notes box and use the keys again.
+
 ## 1.5.1 — 2026-07-30
 
 - Marking runway polish: weekends now read as smaller centred squares (clearer

@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.5.1</span>
+    <span class="ver" id="ver">Guide · v1.6.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -95,6 +95,7 @@
     <button class="card-btn" data-go="absent"><span class="rb-title">A student was away</span><span class="rb-teaser">Follow up vs not sitting</span></button>
     <button class="card-btn" data-go="moderation"><span class="rb-title">Moderation</span><span class="rb-teaser">Flag a paper and note why</span></button>
     <button class="card-btn" data-go="fixing"><span class="rb-title">Fixing a tick</span><span class="rb-teaser">Untick or change a mark</span></button>
+    <button class="card-btn" data-go="keys"><span class="rb-title">Mark by keyboard</span><span class="rb-teaser">Shortcuts for a fast pass</span></button>
     <button class="card-btn" data-go="sync"><span class="rb-title">Two devices</span><span class="rb-teaser">Laptop and phone in sync</span></button>
     <button class="card-btn" data-go="sharing"><span class="rb-title">Records and analysis</span><span class="rb-teaser">Export an assessment</span></button>
   </div>
@@ -185,6 +186,16 @@
   <p>Click the status box next to a name in the roster to tick or untick it in place, or use <b class="k">Un-mark</b> on the open paper. Nothing is ever locked, so you can correct freely at any point.</p>
 </section>
 
+<section data-view="keys" class="detail" hidden>
+  <button class="back" data-go="home">← All recipes</button>
+  <h3>Mark a class by keyboard</h3>
+  <p class="scenario">You are working through a whole class on a laptop and want to keep your hands on the keys rather than reaching for the mouse each time.</p>
+  <span class="lab">The rhythm</span>
+  <p>Open a paper, then press <b class="k">Enter</b> to mark it done and jump to the next unmarked one; hold that rhythm and you tick down the class with a single key. Step to any student with <b class="k">]</b> and <b class="k">[</b>, skip ahead to the next unmarked with <b class="k">n</b>, undo a tick with <b class="k">u</b>, and flag for moderation with <b class="k">f</b>. Press <b class="k">?</b> any time for the full list, or click <b class="k">Keys</b> in the header.</p>
+  <span class="lab">Writing a note mid-flow</span>
+  <p>The shortcuts pause while your cursor is in a text box, so you can type a note freely and Enter just makes a new line. When you are done writing, press <b class="k">Esc</b> to step out of the box; that hands the keys back, so the next <b class="k">Enter</b> marks the paper and moves you on. Landing on a paper never drops you into the note box, so the keys are live the moment you arrive.</p>
+</section>
+
 <section data-view="sync" class="detail" hidden>
   <button class="back" data-go="home">← All recipes</button>
   <h3>Marking on two devices</h3>
@@ -213,6 +224,13 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.6.0 — 2026-07-30</div>
+    <ul>
+      <li>Keyboard shortcuts (desktop): Enter marks done and advances, [ ] step between students, and ? shows the full list. A "Keys" link sits in the header.</li>
+      <li>Shortcuts pause while you type; press Esc to leave the notes box and use them again.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.5.1 — 2026-07-30</div>
     <ul>
