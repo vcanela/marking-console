@@ -269,9 +269,10 @@ current part differ per device) and is excluded from the synced document.
     (input/textarea/select/contentEditable) and when any Ctrl/Cmd/Alt is held, so
     text entry is untouched. `Esc` steps out of a focused field (`blur`), else
     closes the topmost open overlay (`closeTopOverlay`). Action keys fire only in
-    the workspace and never while a dialog is open: `Enter` = `markDone`, `]`/`[`
-    = `stepStudent(±1)`, `n` = `gotoNextUnmarked`, `u` = `unmarkCell`, `f` =
-    `toggleFlag`; anywhere: `?` opens the cheat-sheet (`#hotkeyOverlay`, also the
+    the workspace and never while a dialog is open: `Enter` = `markDone`, `i` =
+    `focusNote` (caret at end; the inverse of `Esc`), `]`/`[` = `stepStudent`,
+    `n` = `gotoNextUnmarked`, `u` = `unmarkCell`, `f` = `toggleFlag`; anywhere:
+    `?` opens the cheat-sheet (`#hotkeyOverlay`, also the
     header **Keys** link), `d` = `goDashboard`. Trip hazards and parts are
     deliberately not hotkeyed (a long/short click list; keeps the set small). The
     notes box does not autofocus, so keys are live on arrival at a paper.

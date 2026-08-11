@@ -3,6 +3,12 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.6.1 — 2026-07-30
+
+- Added `i` to jump the cursor into the notes box (caret at the end), the
+  inverse of Esc which steps out. Marking a paper and writing a note now stay
+  fully on the keyboard.
+
 ## 1.6.0 — 2026-07-30
 
 - Keyboard shortcuts for faster marking (desktop). While marking a paper:

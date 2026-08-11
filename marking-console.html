@@ -689,6 +689,7 @@
     <h3>While marking a paper</h3>
     <table class="hk-table"><tbody>
       <tr><td><kbd>Enter</kbd></td><td>Mark done, jump to the next unmarked</td></tr>
+      <tr><td><kbd>i</kbd></td><td>Type a note (Esc leaves the box)</td></tr>
       <tr><td><kbd>]</kbd> <kbd>[</kbd></td><td>Next / previous student</td></tr>
       <tr><td><kbd>n</kbd></td><td>Skip to the next unmarked paper</td></tr>
       <tr><td><kbd>u</kbd></td><td>Un-mark this paper</td></tr>
@@ -723,7 +724,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.6.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.6.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1375,9 +1376,18 @@ function onHotkey(e) {
   if (S.ui.view !== 'workspace') return;
   const acts = {
     'Enter': markDone, ']': () => stepStudent(1), '[': () => stepStudent(-1),
-    'n': gotoNextUnmarked, 'N': gotoNextUnmarked, 'u': unmarkCell, 'U': unmarkCell, 'f': toggleFlag, 'F': toggleFlag
+    'n': gotoNextUnmarked, 'N': gotoNextUnmarked, 'u': unmarkCell, 'U': unmarkCell,
+    'f': toggleFlag, 'F': toggleFlag, 'i': focusNote, 'I': focusNote
   };
-  if (acts[k]) { acts[k](); e.preventDefault(); }
+  if (acts[k]) { acts[k](); e.preventDefault(); }   // preventDefault so 'i' is not typed into the box it just focused
+}
+// Jump the cursor into the notes box, caret at the end so you carry on writing.
+function focusNote() {
+  const n = document.getElementById('noteInput');
+  if (!n) return;
+  n.focus();
+  const end = n.value.length;
+  n.setSelectionRange(end, end);
 }
 
 // Open an assessment focused on a specific student (used by the follow-up list).
