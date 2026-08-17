@@ -92,6 +92,7 @@ S = {
     id, classId, name,
     dateSat,                 // '' or 'YYYY-MM-DD'; a future date marks the job "upcoming"
     dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
+    archived,                // bool; filed away from the active list and all headline figures (behaviour 16)
     createdAt, updatedAt,    // ISO strings
     hazardSet,               // id into S.hazardSets; assessments can share one set
     parts: [{ id, name, updatedAt }],   // [] means one implicit part (PART_ALL)
@@ -246,8 +247,9 @@ current part differ per device) and is excluded from the synced document.
     overall % as text) with a Due date / Class sort toggle (`ui.jobSort`,
     `setJobSort`). A curated, attributed literary quote (`QUOTES`, `quoteLine`)
     sits high on the dashboard and shows once when the quota is met. Keep the
-    quotes literary and unfussy: no self-help, no exclamation marks. (No archive
-    yet: completed jobs sink to the bottom of the list.)
+    quotes literary and unfussy: no self-help, no exclamation marks. Completed
+    but non-archived jobs sink to the bottom of the active list; archived jobs
+    leave it entirely (behaviour 16).
 14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
     a **forward** heat strip. For each active dated job it spreads
     `remaining + markedToday` evenly across `dl` (days-left) and sums per day, so
@@ -276,6 +278,21 @@ current part differ per device) and is excluded from the synced document.
     header **Keys** link), `d` = `goDashboard`. Trip hazards and parts are
     deliberately not hotkeyed (a long/short click list; keeps the set small). The
     notes box does not autofocus, so keys are live on arrival at a paper.
+16. **Archiving** (`a.archived`, a synced bool on the assessment;
+    `archiveAssessment`/`unarchiveAssessment`): finished jobs are filed into a
+    collapsible **Archived** section at the foot of the dashboard (`toggleArchived`,
+    `ui.archivedOpen`, collapsed by default, muted cards with Unarchive). It is
+    always the teacher's choice, never automatic: when marking crosses a job into
+    complete (`markDone`/`toggleDoneFor` compare `wasComplete`), `maybePromptArchive`
+    offers to archive it and names anything still outstanding (follow-ups, a
+    moderation flag) so **Not yet** is easy; a complete non-archived job also
+    carries an Archive button. Archived jobs leave the active list and **every
+    headline figure** — Overall progress, the Active-jobs/Remaining/Follow-up
+    tiles, Today's quota (`dailyQuota` filters them), and the runway (already
+    excluded as complete). `renderDashboard` splits `all` into non-archived
+    `list` (drives the metrics) and `archived`. The flag rides the assessment
+    base in `mergeDocs` (newer `updatedAt` wins), so archiving syncs with no
+    extra merge code; `normalize` backfills `archived: false`.
 
 ## Design language
 
@@ -339,7 +356,11 @@ student for moderation with a comment, the marking runway (dated jobs shade a
 forward strip, per-day parts sum to the day total, hover/tap caption, hides with
 no dated jobs), the keyboard shortcuts (Enter marks and advances, [ ] step
 students, ? opens the sheet, Esc blurs the notes box then keys work again, keys
-paused while typing), the daily quota bar filling and turning
+paused while typing), archiving (marking the last paper prompts to archive and
+names outstanding follow-ups/flags; Not yet keeps it active with an Archive
+button; archived jobs drop out of Overall progress/quota/runway/tiles and sit in
+the collapsible Archived section; un-archive restores), the daily quota bar
+filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
 only the older key present),

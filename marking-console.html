@@ -483,6 +483,22 @@
     border-radius: 6px; padding: 5px 12px; font-family: var(--mono); font-size: 12px; font-weight: 600;
   }
   .btn-resume:hover { border-color: var(--accent); background: rgba(230, 159, 0, 0.10); }
+  .cc-chip.cc-arch { color: var(--faint); }
+  .cc-actions { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+  .cc-actions .btn-resume { margin-left: 0; }
+  .btn-arch {
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 5px 12px; font-family: var(--mono); font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .btn-arch:hover { border-color: var(--info); color: var(--info); }
+  /* Archived section: collapsed by default, muted cards. */
+  .archived-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 12px; }
+  .archived-caret { font-family: var(--mono); font-size: 12px; color: var(--faint); width: 12px; }
+  .archived-count { font-family: var(--mono); font-size: 11px; color: var(--faint);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; }
+  .archived-card { opacity: 0.6; }
+  .archived-card:hover { opacity: 1; }
 
   .dash-jobs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; }
   .btn-newjob {
@@ -724,7 +740,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.6.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.7.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -740,7 +756,7 @@ const blank = () => ({
   hazardSets: {},       // {setId: [{id, name, deleted?, updatedAt}]} trip-hazard sets; an assessment points at one via hazardSet
   hazardBank: [],       // [{id, name, year, hazards:[{id, name}], updatedAt}] reusable lists prepared ahead of marking; seeded into a job's set by copy
   tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/bank entries
-  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due' },
+  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due', archivedOpen: false },
   settings: {}
 });
 
@@ -816,6 +832,7 @@ function normalize(d) {
     if (!Array.isArray(a.parts)) a.parts = [];
     a.parts.forEach(p => { if (p.updatedAt == null) p.updatedAt = ''; });
     if (!a.marks || typeof a.marks !== 'object') a.marks = {};
+    if (typeof a.archived !== 'boolean') a.archived = false;   // filed away from the active list; set by the teacher
     if (a.updatedAt == null) a.updatedAt = a.createdAt || '';
     if (!a.hazardSet) a.hazardSet = uid();               // each new/orphan assessment gets its own set
     if (!d.hazardSets[a.hazardSet]) d.hazardSets[a.hazardSet] = [];
@@ -1014,7 +1031,7 @@ function toggleTheme() {
 // of today's per-job targets. This is the number meant to pull you along.
 function dailyQuota() {
   let markedToday = 0, targetToday = 0;
-  S.assessments.map(assessmentStats).forEach(x => { markedToday += x.markedToday; if (x.dailyTarget) targetToday += x.dailyTarget; });
+  S.assessments.filter(a => !a.archived).map(assessmentStats).forEach(x => { markedToday += x.markedToday; if (x.dailyTarget) targetToday += x.dailyTarget; });
   const toGo = Math.max(0, targetToday - markedToday);
   const pct = targetToday ? Math.min(100, Math.round(100 * markedToday / targetToday)) : (markedToday ? 100 : 0);
   const met = targetToday > 0 && markedToday >= targetToday;
@@ -1071,7 +1088,11 @@ function renderDashboard() {
     return;
   }
 
-  const list = S.assessments.map(assessmentStats);
+  // Archived jobs are filed away: they leave the active list and every headline
+  // figure (overall progress, quota, runway, tiles all count active only).
+  const all = S.assessments.map(assessmentStats);
+  const list = all.filter(x => !x.a.archived);
+  const archived = all.filter(x => x.a.archived);
   let marked = 0, denom = 0, remaining = 0, followup = 0;
   list.forEach(x => { marked += x.marked; denom += x.denom; remaining += x.remaining; followup += x.followup; });
   const pct = denom ? Math.round(100 * marked / denom) : 0;
@@ -1092,6 +1113,7 @@ function renderDashboard() {
     if (mode === 'class') return (x.cls ? x.cls.name : '').localeCompare(y.cls ? y.cls.name : '') || byDue(x, y);
     return byDue(x, y);
   });
+  const archivedOrder = archived.slice().sort((x, y) => byDue(y, x));   // most recent due first
 
   el.innerHTML = `
     <section class="dash-section">
@@ -1135,9 +1157,20 @@ function renderDashboard() {
           <button class="btn-newjob" onclick="openJobModal()">+ New marking job</button>
         </span>
       </div>
-      ${order.map(jobCard).join('')}
-    </section>`;
+      ${order.length ? order.map(jobCard).join('') : '<div class="quota-empty">No active jobs. Add one, or reopen an archived job below.</div>'}
+    </section>
+
+    ${archived.length ? `
+    <section class="dash-section archived-section">
+      <button class="archived-head" onclick="toggleArchived()" title="${S.ui.archivedOpen ? 'Hide' : 'Show'} archived jobs">
+        <span class="archived-caret">${S.ui.archivedOpen ? '▾' : '▸'}</span>
+        <span class="dash-h" style="margin-bottom:0;">Archived</span>
+        <span class="archived-count">${archived.length}</span>
+      </button>
+      ${S.ui.archivedOpen ? archivedOrder.map(jobCard).join('') : ''}
+    </section>` : ''}`;
 }
+function toggleArchived() { S.ui.archivedOpen = !S.ui.archivedOpen; save(); renderDashboard(); }
 
 // Per-job share of today, sorted most urgent first: the fair distribution the
 // single quota number hides. Only dated, active (not complete/upcoming) jobs.
@@ -1269,15 +1302,20 @@ function jobCard(x) {
     chips.push(`<span class="job-chip left${urg}">${x.dl === 0 ? 'due today' : x.dl + ' day' + (x.dl === 1 ? '' : 's') + ' left'}</span>`);
   }
   if (x.upcoming) chips.push(`<span class="job-chip up">upcoming</span>`);
+  const isArch = a.archived;
   let pace;
-  if (x.complete) pace = `<span class="cc-chip cc-done">Complete ✓</span>`;
+  if (isArch) pace = `<span class="cc-chip cc-arch">Archived</span>`;
+  else if (x.complete) pace = `<span class="cc-chip cc-done">Complete ✓</span>`;
   else if (x.upcoming) pace = `<span class="cc-chip up">not sat yet</span>`;
   else if (x.dl === 0) pace = `<span class="cc-chip miss">${x.remaining} left</span>`;
   else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
   else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
   const missChip = x.followup ? `<span class="cc-chip followup">${x.followup} to follow up</span>` : '';
-  const btn = `<button class="btn-resume" onclick="openAssessment('${a.id}')">${x.complete ? 'Review' : 'Resume ›'}</button>`;
-  return `<div class="class-card">
+  const resumeBtn = `<button class="btn-resume" onclick="openAssessment('${a.id}')">${x.complete ? 'Review' : 'Resume ›'}</button>`;
+  const archBtn = isArch
+    ? `<button class="btn-arch" onclick="unarchiveAssessment('${a.id}')">Unarchive</button>`
+    : (x.complete ? `<button class="btn-arch" onclick="archiveAssessment('${a.id}')">Archive</button>` : '');
+  return `<div class="class-card${isArch ? ' archived-card' : ''}">
     <div class="class-card-top">
       <span class="class-card-name">${esc(a.name)}<span class="job-class">${esc(cls ? cls.name : '')}</span></span>
       <span class="class-card-right">
@@ -1287,8 +1325,23 @@ function jobCard(x) {
       </span>
     </div>
     <div class="job-chips">${chips.join('')}</div>
-    <div class="class-card-foot">${pace}${missChip}${btn}</div>
+    <div class="class-card-foot">${pace}${missChip}<span class="cc-actions">${archBtn}${resumeBtn}</span></div>
   </div>`;
+}
+function archiveAssessment(aid) {
+  const a = S.assessments.find(x => x.id === aid);
+  if (!a) return;
+  a.archived = true; a.updatedAt = nowISO();
+  save(); render();
+  toast(`${a.name} archived`);
+}
+function unarchiveAssessment(aid) {
+  const a = S.assessments.find(x => x.id === aid);
+  if (!a) return;
+  a.archived = false; a.updatedAt = nowISO();
+  S.ui.archivedOpen = true;   // keep the section open so the reopened job is visible on its way out
+  save(); render();
+  toast(`${a.name} moved back to active`);
 }
 
 function openAssessment(aid) {
@@ -1488,11 +1541,13 @@ function rosterBoxClick(sid) {
 function toggleDoneFor(sid) {
   const a = curAssessment(); if (!a) return;
   if (absent(markOf(a, sid))) return;
+  const wasComplete = assessmentStats(a).complete;
   const cell = ensureCell(a, sid, curPart());
   cell.done = !cell.done;
   cell.markedAt = cell.done ? nowISO() : null;
   cell.updatedAt = nowISO();
   save(); render();
+  if (cell.done) { const aid = a.id; setTimeout(() => maybePromptArchive(aid, wasComplete), 80); }
 }
 
 function renderPaper() {
@@ -1751,6 +1806,7 @@ function markDone() {
   if (!a || !c || !s) return;
   if (absent(markOf(a, s.id))) return;
   const wasMet = dailyQuota().met;
+  const wasComplete = assessmentStats(a).complete;
   const cell = ensureCell(a, s.id, curPart());
   cell.done = true;
   cell.markedAt = nowISO();
@@ -1766,6 +1822,27 @@ function markDone() {
   }
   if (!wasMet && dailyQuota().met) toast('Daily quota met. ' + quoteLine(1));   // earned, not nagged
   setTimeout(gotoNextUnmarked, 350);
+  const aid = a.id;
+  setTimeout(() => maybePromptArchive(aid, wasComplete), 450);   // after the tick, ask if the finished job should be filed
+}
+// When marking has just completed a job, offer to archive it. Fires on the
+// transition into complete only, and flags anything still outstanding (a
+// follow-up owed, a paper under moderation) so "not yet" is an easy choice.
+function maybePromptArchive(aid, wasComplete) {
+  const a = S.assessments.find(x => x.id === aid);
+  if (!a || a.archived || wasComplete) return;
+  if (!assessmentStats(a).complete) return;   // only when it has just become complete
+  const st = assessmentStats(a);
+  const bits = [];
+  if (st.followup) bits.push(`${st.followup} student${st.followup === 1 ? '' : 's'} still to follow up`);
+  const flags = Object.values(a.marks || {}).filter(m => m.flag).length;
+  if (flags) bits.push(`${flags} paper${flags === 1 ? '' : 's'} flagged for moderation`);
+  const note = bits.length ? `\n\nStill outstanding: ${bits.join('; ')}.` : '';
+  if (confirm(`${a.name} is fully marked. Move it to Archived?${note}\n\nYou can un-archive any time.`)) {
+    a.archived = true; a.updatedAt = nowISO();
+    save(); goDashboard();
+    toast(`${a.name} archived`);
+  }
 }
 
 // Un-tick the current cell (mistake, or after moderation). Stays put.

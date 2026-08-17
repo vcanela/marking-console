@@ -3,6 +3,16 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.7.0 — 2026-07-30
+
+- Archive finished jobs into their own collapsible "Archived" section, so the
+  active list stays only what you are still marking. When marking completes a
+  job you are asked whether to archive it (with a note if a follow-up or a
+  moderation flag is still outstanding), so nothing is filed away before you are
+  ready; "Not yet" keeps it active with an Archive button for later.
+- Archived jobs leave every headline figure: Overall progress, Today's quota,
+  the runway and the tiles all count active work only. Un-archive any time.
+
 ## 1.6.1 — 2026-07-30
 
 - Added `i` to jump the cursor into the notes box (caret at the end), the

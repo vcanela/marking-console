@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.6.1</span>
+    <span class="ver" id="ver">Guide · v1.7.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -96,6 +96,7 @@
     <button class="card-btn" data-go="moderation"><span class="rb-title">Moderation</span><span class="rb-teaser">Flag a paper and note why</span></button>
     <button class="card-btn" data-go="fixing"><span class="rb-title">Fixing a tick</span><span class="rb-teaser">Untick or change a mark</span></button>
     <button class="card-btn" data-go="keys"><span class="rb-title">Mark by keyboard</span><span class="rb-teaser">Shortcuts for a fast pass</span></button>
+    <button class="card-btn" data-go="archive"><span class="rb-title">Filing finished work</span><span class="rb-teaser">Archive a completed job</span></button>
     <button class="card-btn" data-go="sync"><span class="rb-title">Two devices</span><span class="rb-teaser">Laptop and phone in sync</span></button>
     <button class="card-btn" data-go="sharing"><span class="rb-title">Records and analysis</span><span class="rb-teaser">Export an assessment</span></button>
   </div>
@@ -196,6 +197,15 @@
   <p>Press <b class="k">i</b> to jump straight into the notes box, cursor at the end, ready to type. The shortcuts pause while your cursor is there, so you write freely and Enter just makes a new line. When you are done, press <b class="k">Esc</b> to step out; that hands the keys back, so the next <b class="k">Enter</b> marks the paper and moves you on. Landing on a paper never drops you into the note box, so the keys are live the moment you arrive: <b class="k">i</b> to write, <b class="k">Esc</b> then <b class="k">Enter</b> to mark and go.</p>
 </section>
 
+<section data-view="archive" class="detail" hidden>
+  <button class="back" data-go="home">← All recipes</button>
+  <h3>Filing finished work</h3>
+  <p class="scenario">You have finished marking a test and want it out of the way, but a couple of others are still on the go and you do not want the done one cluttering the list.</p>
+  <span class="lab">In the app</span>
+  <p>When your last paper takes a job to 100%, the app asks whether to move it to <b class="k">Archived</b>. If a student is still to follow up, or a paper is flagged for moderation, the question says so, so you can choose <b>Not yet</b> and finish those first. A job you keep active shows an <b class="k">Archive</b> button on its card for whenever you are ready.</p>
+  <p>Archived jobs sit in their own collapsed <b class="k">Archived</b> section at the foot of the dashboard, and they no longer count toward Overall progress, the daily quota, or the runway, so those figures track only what is still live. Open the section any time to review a job or <b class="k">Un-archive</b> it back to the active list.</p>
+</section>
+
 <section data-view="sync" class="detail" hidden>
   <button class="back" data-go="home">← All recipes</button>
   <h3>Marking on two devices</h3>
@@ -224,6 +234,13 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.7.0 — 2026-07-30</div>
+    <ul>
+      <li>Finished jobs can be archived into their own collapsible section, out of the active list. You are asked when a job is fully marked, and told if a follow-up or flag is still outstanding.</li>
+      <li>Archived jobs no longer count toward Overall progress, the quota, or the runway. Un-archive any time.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.6.1 — 2026-07-30</div>
     <ul>
