@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.7.0</span>
+    <span class="ver" id="ver">Guide · v1.8.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -97,6 +97,7 @@
     <button class="card-btn" data-go="fixing"><span class="rb-title">Fixing a tick</span><span class="rb-teaser">Untick or change a mark</span></button>
     <button class="card-btn" data-go="keys"><span class="rb-title">Mark by keyboard</span><span class="rb-teaser">Shortcuts for a fast pass</span></button>
     <button class="card-btn" data-go="archive"><span class="rb-title">Filing finished work</span><span class="rb-teaser">Archive a completed job</span></button>
+    <button class="card-btn" data-go="onpaper"><span class="rb-title">Marked on paper already</span><span class="rb-teaser">Record a batch at once</span></button>
     <button class="card-btn" data-go="sync"><span class="rb-title">Two devices</span><span class="rb-teaser">Laptop and phone in sync</span></button>
     <button class="card-btn" data-go="sharing"><span class="rb-title">Records and analysis</span><span class="rb-teaser">Export an assessment</span></button>
   </div>
@@ -187,6 +188,15 @@
   <p>Click the status box next to a name in the roster to tick or untick it in place, or use <b class="k">Un-mark</b> on the open paper. Nothing is ever locked, so you can correct freely at any point.</p>
 </section>
 
+<section data-view="onpaper" class="detail" hidden>
+  <button class="back" data-go="home">← All recipes</button>
+  <h3>You marked a stack on paper</h3>
+  <p class="scenario">You did your marking away from any device and now want to record a whole set as done, rather than ticking each name one at a time.</p>
+  <span class="lab">In the app</span>
+  <p>Open the job and use <b class="k">Mark all</b> in the Papers header; it ticks every remaining paper in the part you are viewing at once. Absent students and papers you have already marked are left alone, and it asks you to confirm the count first (naming the section in a multi-part job). If a few in the batch were not actually done, mark all, then untick those few from the roster.</p>
+  <p>You can still log trip hazards and notes on any of those papers afterwards; marking done and recording mistakes are independent.</p>
+</section>
+
 <section data-view="keys" class="detail" hidden>
   <button class="back" data-go="home">← All recipes</button>
   <h3>Mark a class by keyboard</h3>
@@ -234,6 +244,12 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.8.0 — 2026-07-30</div>
+    <ul>
+      <li>A "Mark all" button in the Papers header ticks every remaining paper in the current part at once, for recording a batch you marked on paper. Absent and already-done papers are skipped.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.7.0 — 2026-07-30</div>
     <ul>

@@ -3,6 +3,14 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.8.0 — 2026-07-30
+
+- "Mark all" button in the Papers header: ticks every remaining paper in the
+  current part in one go, for when you marked a batch on paper and are recording
+  it on return. It skips absent students and already-done papers, asks to
+  confirm with the count (and part name in a multi-part job), and offers to
+  archive if it completes the job. Un-ticking stays per student.
+
 ## 1.7.0 — 2026-07-30
 
 - Archive finished jobs into their own collapsible "Archived" section, so the

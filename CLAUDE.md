@@ -166,7 +166,12 @@ current part differ per device) and is excluded from the synced document.
    respects `prefers-reduced-motion`; green row flash; auto-advance after
    350 ms). It is reversible: a done cell shows an **Un-mark** button
    (`unmarkCell`, no advance), and the roster status box toggles done directly
-   (`toggleDoneFor`) for quick corrections after moderation.
+   (`toggleDoneFor`) for quick corrections after moderation. **Mark all**
+   (`markAllRemaining`, a button in the Papers column head shown only while
+   papers remain) ticks every not-done, non-absent cell in the **current part**
+   at once (for marking taken on paper and recorded on return), behind a confirm
+   naming the count and part; it can trigger `maybePromptArchive` on completion.
+   Un-ticking stays per student.
 6. **Trip hazards**: the canonical term everywhere (input, hints, the
    **Copy hazard summary** button), coloured purple to tie to the Trip hazards
    column. **Per assessment**, not global: each assessment points at a hazard
@@ -346,7 +351,9 @@ setup (add a class, then an assessment), roster paste with duplicate first
 names, a single-part job (mark/un-tick, absence follow-up vs not-sitting,
 hazard toggle), a
 multi-part job (part bar, mark a part across students, auto-jump to the next
-part, per-part hazard counts), un-ticking from the roster box, the hazard bank
+part, per-part hazard counts), un-ticking from the roster box, Mark all
+remaining (ticks the current part's unmarked non-absent cells, skips absences,
+confirms with the count/part, hides at full), the hazard bank
 (add a bank list in Set up), importing hazards (from the bank and from a live
 set, at job creation, on edit, and while marking; confirm it is an additive
 copy that stays independent of the source and dedupes on re-import), deleting a
