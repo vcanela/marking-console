@@ -3,6 +3,12 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.8.1 — 2026-07-30
+
+- Overall progress now shows as a ring with the percentage in the centre,
+  instead of a wide bar; it reads at a glance and frees a little space. The
+  runway and the per-job quota bars are unchanged.
+
 ## 1.8.0 — 2026-07-30
 
 - "Mark all" button in the Papers header: ticks every remaining paper in the

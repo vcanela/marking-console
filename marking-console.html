@@ -392,6 +392,11 @@
   .dash-bignum.met { color: var(--success); }
   .dash-bigsub { font-family: var(--mono); font-size: 13px; color: var(--muted); }
   .progress-track.lg { height: 12px; border-radius: 6px; }
+  /* Overall progress ring */
+  .overall { display: flex; align-items: center; gap: 20px; }
+  .pring { flex: 0 0 auto; }
+  .ring-num { fill: var(--accent); font-family: var(--mono); font-weight: 600; }
+  @media (max-width: 520px) { .overall { gap: 14px; } }
   .dash-quote { font-family: var(--mono); font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.6; max-width: 640px; margin: 0 auto 18px; font-style: italic; }
 
   /* Today's quota: one compact bar per dated active job, most urgent first. */
@@ -752,7 +757,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.8.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.8.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1130,11 +1135,10 @@ function renderDashboard() {
   el.innerHTML = `
     <section class="dash-section">
       <div class="dash-h">Overall progress</div>
-      <div class="dash-hero-top">
-        <span class="dash-bignum">${pct}%</span>
+      <div class="overall">
+        ${progressRing(pct, 108)}
         <span class="dash-bigsub">${marked} of ${denom} marked${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
       </div>
-      <div class="progress-track lg" style="margin-top:14px;"><div class="progress-fill" style="width:${pct}%"></div></div>
     </section>
 
     <section class="dash-section">
@@ -1204,6 +1208,18 @@ function quotaRowsHtml(list) {
   }).join('');
 }
 function setJobSort(mode) { S.ui.jobSort = mode; save(); render(); }
+
+// A progress ring: track circle plus an accent arc, percentage in the centre.
+function progressRing(pct, size) {
+  const r = size / 2 - 7, c = 2 * Math.PI * r, off = c * (1 - pct / 100), cc = size / 2;
+  return `<svg class="pring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${pct}% marked">
+    <circle cx="${cc}" cy="${cc}" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="8"/>
+    <circle cx="${cc}" cy="${cc}" r="${r}" fill="none" stroke="var(--accent)" stroke-width="8"
+      stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+      transform="rotate(-90 ${cc} ${cc})"/>
+    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" class="ring-num" font-size="${Math.round(size * 0.26)}">${pct}%</text>
+  </svg>`;
+}
 
 // Marking runway: a forward heat strip. For each active dated job, spread its
 // remaining cells evenly across its days-left (the same constant-load figure as

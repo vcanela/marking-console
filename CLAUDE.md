@@ -242,7 +242,11 @@ current part differ per device) and is excluded from the synced document.
     (`mark.flagNote`), toggled from the paper view (yellow `--flag`). Flagged
     students show a ⚑ in the roster; the flag and comment appear in the
     assessment data export as a moderation record.
-13. **Daily quota and motivation**: `dailyQuota()` sums cells marked today and
+13. **Daily quota and motivation**: the dashboard's **Overall progress** is a
+    ring (`progressRing(pct, size)`, percentage centred) over active (non-archived)
+    cells; the per-job quota below it stays as sorted bars (rings lose the
+    at-a-glance comparison there), and the runway stays linear (a countdown reads
+    best as a line). `dailyQuota()` sums cells marked today and
     today's targets across all active jobs; a second header bar shows progress
     toward it, green when met (replaces the old "missing" header stat). On the
     dashboard the quota section breaks the day down **per job** (`quotaRowsHtml`):
