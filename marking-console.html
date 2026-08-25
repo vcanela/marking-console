@@ -115,6 +115,8 @@
     width: 0%; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .progress-fill.met { background: linear-gradient(90deg, var(--success-dim), var(--success)); }
+  .progress-fill.u-danger { background: linear-gradient(90deg, color-mix(in srgb, var(--danger) 45%, transparent), var(--danger)); }
+  .progress-fill.u-later  { background: linear-gradient(90deg, color-mix(in srgb, var(--info) 40%, transparent), var(--info)); }
   .progress-label { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 132px; text-align: right; }
   .progress-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); min-width: 104px; }
   .progress-wrap + .progress-wrap { margin-top: 6px; }
@@ -449,15 +451,25 @@
   .sort-opt.on { background: rgba(230, 159, 0, 0.10); color: var(--accent); }
 
   .dash-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; margin-bottom: 18px; }
-  .tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
+  .tile { background: var(--panel); border: 1px solid var(--border); border-left-width: 3px; border-radius: 10px; padding: 13px 15px; }
   .tile-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); }
   .tile-value { font-family: var(--mono); font-size: 26px; font-weight: 600; margin-top: 4px; color: var(--text); }
+  /* Each dashboard tile carries a semantic hue: edge, soft wash and value. */
+  .tile.t-info    { border-left-color: var(--info);    background: color-mix(in srgb, var(--info) 7%, var(--panel)); }
+  .tile.t-info    .tile-value { color: var(--info); }
+  .tile.t-accent  { border-left-color: var(--accent);  background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+  .tile.t-accent  .tile-value { color: var(--accent); }
+  .tile.t-success { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--panel)); }
+  .tile.t-success .tile-value { color: var(--success); }
+  .tile.t-flag    { border-left-color: var(--flag);    background: color-mix(in srgb, var(--flag) 9%, var(--panel)); }
+  .tile.t-flag    .tile-value { color: var(--flag); }
+  .tile.t-muted   .tile-value { color: var(--faint); }
   .tile.good .tile-value { color: var(--success); }
   .tile.warn .tile-value { color: var(--danger); }
   .tile.attn .tile-value { color: var(--accent); }
   button.tile { font: inherit; }
   .tile.clickable { cursor: pointer; text-align: left; }
-  .tile.clickable:hover { border-color: var(--accent); }
+  .tile.clickable:hover { filter: brightness(1.08); }
   .fu-item {
     width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 8px; padding: 10px 13px; margin-bottom: 8px; cursor: pointer;
@@ -470,7 +482,13 @@
 
   .linklike { background: none; border: none; color: var(--info); font: inherit; padding: 0; text-decoration: underline; }
 
-  .class-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  .class-card { background: var(--panel-2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  /* Left stripe by state, so the jobs list reads as a colour-coded status column. */
+  .class-card.s-danger  { border-left-color: var(--danger); }
+  .class-card.s-soon    { border-left-color: var(--accent); }
+  .class-card.s-info    { border-left-color: var(--info); }
+  .class-card.s-success { border-left-color: var(--success); }
+  .class-card.s-idle    { border-left-color: var(--faint); }
   .class-card:last-child { margin-bottom: 0; }
   .class-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .class-card-name { font-size: 14px; font-weight: 600; }
@@ -757,7 +775,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.8.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.9.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1155,11 +1173,11 @@ function renderDashboard() {
     <div class="dash-quote">${esc(quoteLine(0))}</div>
 
     <section class="dash-tiles">
-      ${tile('Active jobs', active.length)}
-      ${tile('Remaining', remaining, remaining === 0 ? 'good' : '')}
+      ${tile('Active jobs', active.length, 't-info')}
+      ${tile('Remaining', remaining, remaining === 0 ? 't-success' : 't-accent')}
       ${followup
-        ? `<button class="tile attn clickable" onclick="openFollowup()" title="See who to follow up"><div class="tile-label">Follow up</div><div class="tile-value">${followup}</div></button>`
-        : tile('Follow up', 0)}
+        ? `<button class="tile t-flag clickable" onclick="openFollowup()" title="See who to follow up"><div class="tile-label">Follow up</div><div class="tile-value">${followup}</div></button>`
+        : tile('Follow up', 0, 't-muted')}
     </section>
 
     <section class="dash-section">
@@ -1198,12 +1216,14 @@ function quotaRowsHtml(list) {
     const done = x.markedToday, target = x.dailyTarget;
     const pct = target ? Math.min(100, Math.round(100 * done / target)) : 0;
     const met = done >= target;
+    // Colour the bar by urgency (soonest warm, later cool), reinforcing the sort.
+    const urg = met ? 'met' : (x.dl <= 1 ? 'u-danger' : (x.dl <= 2 ? '' : 'u-later'));
     return `<div class="quota-row">
       <div class="quota-row-head">
         <span class="quota-job">${esc(x.cls ? x.cls.name : '')}<span class="job-class">${esc(x.a.name)}</span></span>
         <span class="quota-row-num${met ? ' met' : ''}">${done}/${target} today${x.dl !== null ? ` · ${x.dl}d` : ''}</span>
       </div>
-      <div class="progress-track sm"><div class="progress-fill${met ? ' met' : ''}" style="width:${pct}%"></div></div>
+      <div class="progress-track sm"><div class="progress-fill${urg ? ' ' + urg : ''}" style="width:${pct}%"></div></div>
     </div>`;
   }).join('');
 }
@@ -1331,6 +1351,14 @@ function jobCard(x) {
   }
   if (x.upcoming) chips.push(`<span class="job-chip up">upcoming</span>`);
   const isArch = a.archived;
+  // Left-stripe colour by state, matching the urgency language used elsewhere.
+  const stateCls = isArch ? 's-idle'
+    : x.complete ? 's-success'
+    : x.upcoming ? 's-idle'
+    : (x.dl !== null && x.dl <= 1) ? 's-danger'
+    : (x.dl !== null && x.dl <= 2) ? 's-soon'
+    : (x.dl !== null) ? 's-info'
+    : 's-idle';
   let pace;
   if (isArch) pace = `<span class="cc-chip cc-arch">Archived</span>`;
   else if (x.complete) pace = `<span class="cc-chip cc-done">Complete ✓</span>`;
@@ -1343,7 +1371,7 @@ function jobCard(x) {
   const archBtn = isArch
     ? `<button class="btn-arch" onclick="unarchiveAssessment('${a.id}')">Unarchive</button>`
     : (x.complete ? `<button class="btn-arch" onclick="archiveAssessment('${a.id}')">Archive</button>` : '');
-  return `<div class="class-card${isArch ? ' archived-card' : ''}">
+  return `<div class="class-card ${stateCls}${isArch ? ' archived-card' : ''}">
     <div class="class-card-top">
       <span class="class-card-name">${esc(a.name)}<span class="job-class">${esc(cls ? cls.name : '')}</span></span>
       <span class="class-card-right">

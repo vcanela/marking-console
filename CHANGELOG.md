@@ -3,6 +3,16 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.9.0 — 2026-08-25
+
+- More colour on the dashboard, all from the Okabe-Ito palette and each keeping
+  its meaning. The three tiles carry a hue each (Active jobs blue, Remaining
+  orange then green at zero, Follow up yellow when any are outstanding). Today's
+  quota bars are coloured by urgency (due today vermillion, within two days
+  orange, comfortable blue, met green). Job cards gain a left status stripe in
+  the same language, so the list reads as a colour-coded status column. The
+  colourblind-safe reads hold and both themes are covered.
+
 ## 1.8.1 — 2026-07-30
 
 - Overall progress now shows as a ring with the percentage in the centre,

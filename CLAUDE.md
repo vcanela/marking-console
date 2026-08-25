@@ -259,6 +259,15 @@ current part differ per device) and is excluded from the synced document.
     quotes literary and unfussy: no self-help, no exclamation marks. Completed
     but non-archived jobs sink to the bottom of the active list; archived jobs
     leave it entirely (behaviour 16).
+    **Dashboard colour**: colour is applied by meaning, never for decoration, so
+    the colourblind-safe reads hold. The three tiles carry a hue each
+    (`t-info`/`t-accent`/`t-success`/`t-flag`: Active jobs blue, Remaining orange
+    then green at zero, Follow up yellow when any); quota bars are coloured by
+    urgency (`u-danger` due today, default `--accent` within two days, `u-later`
+    blue further out, `.met` green); job cards get a left stripe by state
+    (`s-danger`/`s-soon`/`s-info`/`s-success`/`s-idle`) in the same language.
+    Hues are soft `color-mix` washes over `--panel`; if you add a dashboard
+    element, colour it by state from the semantic palette, do not invent a hue.
 14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
     a **forward** heat strip. For each active dated job it spreads
     `remaining + markedToday` evenly across `dl` (days-left) and sums per day, so
