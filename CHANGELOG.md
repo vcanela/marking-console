@@ -3,6 +3,12 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.10.1 — 2026-08-25
+
+- Fixed the keyboard-shortcut hint overlapping the button label (most visible on
+  "Mark part done" / Enter). Buttons now reserve symmetric space sized to the
+  hint, so the label stays centred and clear.
+
 ## 1.10.0 — 2026-08-25
 
 - Reworked the Current Paper view for clearer grouping: the Sat-on date moves up

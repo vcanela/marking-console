@@ -263,18 +263,24 @@
   .paper-copy { margin-top: 8px; }
   .paper-copy .btn { font-size: 12px; padding: 6px 12px; }
   .paper-actions.primary { margin-top: 16px; }
-  .paper-actions.primary .btn-nav { padding: 9px 16px; font-size: 13px; }   /* pair in size with Mark done */
+  .paper-actions.primary .btn-nav { padding-top: 9px; padding-bottom: 9px; font-size: 13px; }   /* pair in height with Mark done; L/R handled by has-hint */
   .paper-special { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
   .special-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-bottom: 9px; }
   .special-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .special-row .btn { padding: 5px 12px; font-size: 12px; }
-  /* tiny keyboard-shortcut hint in a button's corner (desktop only) */
-  .btn.has-hint { position: relative; padding-right: 30px; }
+  /* tiny keyboard-shortcut hint in a button's corner (desktop only). Symmetric
+     padding keeps the label centred and clear of the hint; the "wide" variant
+     leaves room for a word key like Enter, the plain one for a single letter. */
+  .btn.has-hint { position: relative; padding-left: 26px; padding-right: 26px; }
+  .btn.has-hint-wide { position: relative; padding-left: 48px; padding-right: 48px; }
   .kbd-hint { position: absolute; right: 6px; bottom: 3px; font-family: var(--mono); font-weight: 400;
     font-size: 8.5px; line-height: 1; letter-spacing: 0.02em; color: var(--faint);
     border: 1px solid var(--border); border-radius: 3px; padding: 1px 3px; pointer-events: none; }
-  .special-row .btn.has-hint { padding-right: 26px; }
-  @media (hover: none) { .kbd-hint { display: none; } .btn.has-hint { padding-right: 16px; } .special-row .btn.has-hint { padding-right: 12px; } }
+  @media (hover: none) {
+    .kbd-hint { display: none; }
+    .btn.has-hint, .btn.has-hint-wide { padding-left: 16px; padding-right: 16px; }
+    .special-row .btn.has-hint { padding-left: 12px; padding-right: 12px; }
+  }
   .empty-state { padding: 40px 22px; color: var(--faint); text-align: center; font-size: 13px; }
   .empty-state .btn { margin-top: 14px; }
   .class-summary-row { padding: 12px 22px; border-top: 1px solid var(--border); margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -793,7 +799,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.10.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.10.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1707,7 +1713,7 @@ function renderPaper() {
   const notePlaceholder = multi ? `Optional note on ${esc(partName)} (used in Copy feedback)` : 'Optional note for this paper (used in Copy feedback)';
   const doneBtn = cell.done
     ? `<button class="btn btn-unmark has-hint" onclick="unmarkCell()">↺ Un-mark${multi ? ' part' : ''}<span class="kbd-hint">u</span></button>`
-    : `<button class="btn btn-done has-hint" onclick="markDone()">✓ Mark ${multi ? 'part ' : ''}done<span class="kbd-hint">Enter</span></button>`;
+    : `<button class="btn btn-done has-hint-wide" onclick="markDone()">✓ Mark ${multi ? 'part ' : ''}done<span class="kbd-hint">Enter</span></button>`;
   const flagBtn = `<button class="btn btn-flag has-hint${m.flag ? ' on' : ''}" onclick="toggleFlag()">⚑ ${m.flag ? 'Flagged' : 'Flag for moderation'}<span class="kbd-hint">f</span></button>`;
   const modBlock = m.flag
     ? `<div class="paper-mod"><label for="flagInput">Moderation note</label>
