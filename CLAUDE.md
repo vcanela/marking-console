@@ -206,11 +206,13 @@ current part differ per device) and is excluded from the synced document.
    are copies, so the workflow is: mark class 1, refine, then import class 1's
    live set into class 2 to carry the refinements across (each class keeps its
    own frequencies).
-7. **Feedback prompt export** (`copyPrompt`): clipboard text with first name,
+7. **Feedback prompt export** (`copyPrompt`, the **Copy feedback** button under
+   the note in the paper view): clipboard text with first name,
    class, assessment name, and the student's tagged issues and notes gathered
    across every part (grouped by part name when multi-part), plus fixed
    constraints (address student directly, encouraging but honest, ~80 words, do
-   not invent issues beyond those listed). The owner pastes this into Claude.
+   not invent issues beyond those listed). It is whole-assessment for that one
+   student, not per-part. The owner pastes this into Claude.
 8. **Two assessment exports, both in the workspace** (`class-summary-row`):
    **hazard summary** (`copyAssessmentSummary`) is the trip-hazard frequency
    table for reteaching; **assessment data** (`copyAssessmentData`) is a full
@@ -295,7 +297,12 @@ current part differ per device) and is excluded from the synced document.
     `?` opens the cheat-sheet (`#hotkeyOverlay`, also the
     header **Keys** link), `d` = `goDashboard`. Trip hazards and parts are
     deliberately not hotkeyed (a long/short click list; keeps the set small). The
-    notes box does not autofocus, so keys are live on arrival at a paper.
+    notes box does not autofocus, so keys are live on arrival at a paper. Each
+    action button shows its key in a tiny corner (`.kbd-hint`, hidden on touch
+    via `@media (hover: none)`) to help learn them. The paper view groups its
+    controls: header + Sat-on, then a **Feedback** section (logged hazards, note,
+    Copy feedback), then the paired everyday actions (Mark done, Next unmarked),
+    then a separated **Less often** group (Flag, Absent follow-up / not-sitting).
 16. **Archiving** (`a.archived`, a synced bool on the assessment;
     `archiveAssessment`/`unarchiveAssessment`): finished jobs are filed into a
     collapsible **Archived** section at the foot of the dashboard (`toggleArchived`,

@@ -257,6 +257,24 @@
   .paper-mod textarea:focus { outline: none; border-color: var(--flag); }
   .nav-row { display: flex; gap: 8px; margin-top: 10px; }
   .btn-nav { padding: 6px 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  /* Current Paper: grouped sections */
+  .paper-sec { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--faint); margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .paper-copy { margin-top: 8px; }
+  .paper-copy .btn { font-size: 12px; padding: 6px 12px; }
+  .paper-actions.primary { margin-top: 16px; }
+  .paper-actions.primary .btn-nav { padding: 9px 16px; font-size: 13px; }   /* pair in size with Mark done */
+  .paper-special { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .special-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-bottom: 9px; }
+  .special-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .special-row .btn { padding: 5px 12px; font-size: 12px; }
+  /* tiny keyboard-shortcut hint in a button's corner (desktop only) */
+  .btn.has-hint { position: relative; padding-right: 30px; }
+  .kbd-hint { position: absolute; right: 6px; bottom: 3px; font-family: var(--mono); font-weight: 400;
+    font-size: 8.5px; line-height: 1; letter-spacing: 0.02em; color: var(--faint);
+    border: 1px solid var(--border); border-radius: 3px; padding: 1px 3px; pointer-events: none; }
+  .special-row .btn.has-hint { padding-right: 26px; }
+  @media (hover: none) { .kbd-hint { display: none; } .btn.has-hint { padding-right: 16px; } .special-row .btn.has-hint { padding-right: 12px; } }
   .empty-state { padding: 40px 22px; color: var(--faint); text-align: center; font-size: 13px; }
   .empty-state .btn { margin-top: 14px; }
   .class-summary-row { padding: 12px 22px; border-top: 1px solid var(--border); margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -775,7 +793,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.9.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.10.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1667,14 +1685,14 @@ function renderPaper() {
     holder.innerHTML = `
       <div class="paper-pos">${posLine}</div>
       <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
-      <div class="paper-empty-tags" style="align-self:flex-start;">${msg}</div>
       ${satRow}
+      <div class="paper-empty-tags" style="align-self:flex-start;margin-top:12px;">${msg}</div>
       <div class="paper-actions">
         <button class="btn btn-done" onclick="setAbsence('')">Will sit — clear</button>
         ${other}
       </div>
       <div class="nav-row">
-        <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
+        <button class="btn btn-nav has-hint" onclick="gotoNextUnmarked()">Next unmarked<span class="kbd-hint">n</span></button>
       </div>`;
     document.getElementById('satInput').addEventListener('change', e => {
       const mm = ensureMark(a, s.id); mm.satOn = e.target.value; mm.updatedAt = nowISO(); save(); renderPaper();
@@ -1686,11 +1704,11 @@ function renderPaper() {
   const tagsHtml = cell.tags.length
     ? cell.tags.map(tid => `<span class="ptag">${esc(tagName(a, tid))}<button title="Remove" onclick="removeTagFromPaper('${tid}')">×</button></span>`).join('')
     : '<span class="paper-empty-tags">Click trip hazards on the right as you spot mistakes.</span>';
-  const notePlaceholder = multi ? `Optional note on ${esc(partName)} (goes into the feedback prompt)` : 'Optional note for this paper (goes into the feedback prompt)';
+  const notePlaceholder = multi ? `Optional note on ${esc(partName)} (used in Copy feedback)` : 'Optional note for this paper (used in Copy feedback)';
   const doneBtn = cell.done
-    ? `<button class="btn btn-unmark" onclick="unmarkCell()">↺ Un-mark${multi ? ' part' : ''}</button>`
-    : `<button class="btn btn-done" onclick="markDone()">✓ Mark ${multi ? 'part ' : ''}done</button>`;
-  const flagBtn = `<button class="btn btn-flag${m.flag ? ' on' : ''}" onclick="toggleFlag()">⚑ ${m.flag ? 'Flagged' : 'Flag for moderation'}</button>`;
+    ? `<button class="btn btn-unmark has-hint" onclick="unmarkCell()">↺ Un-mark${multi ? ' part' : ''}<span class="kbd-hint">u</span></button>`
+    : `<button class="btn btn-done has-hint" onclick="markDone()">✓ Mark ${multi ? 'part ' : ''}done<span class="kbd-hint">Enter</span></button>`;
+  const flagBtn = `<button class="btn btn-flag has-hint${m.flag ? ' on' : ''}" onclick="toggleFlag()">⚑ ${m.flag ? 'Flagged' : 'Flag for moderation'}<span class="kbd-hint">f</span></button>`;
   const modBlock = m.flag
     ? `<div class="paper-mod"><label for="flagInput">Moderation note</label>
        <textarea id="flagInput" placeholder="Why is this flagged? Kept in the assessment data export.">${esc(m.flagNote || '')}</textarea></div>`
@@ -1698,20 +1716,24 @@ function renderPaper() {
   holder.innerHTML = `
     <div class="paper-pos">${posLine}</div>
     <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
+    ${satRow}
+    <div class="paper-sec">Feedback</div>
     <div class="paper-tags">${tagsHtml}</div>
     <textarea id="noteInput" placeholder="${notePlaceholder}">${esc(cell.note || '')}</textarea>
-    ${satRow}
-    ${modBlock}
-    <div class="paper-actions">
+    <div class="paper-copy"><button class="btn btn-copy" onclick="copyPrompt()">Copy feedback</button></div>
+    <div class="paper-actions primary">
       ${doneBtn}
-      <button class="btn btn-copy" onclick="copyPrompt()">Copy feedback prompt</button>
-      <button class="btn btn-nav" onclick="gotoNextUnmarked()">Next unmarked ⇥</button>
+      <button class="btn btn-nav has-hint" onclick="gotoNextUnmarked()">Next unmarked<span class="kbd-hint">n</span></button>
     </div>
-    <div class="absence-row">
-      ${flagBtn}
-      <span class="absence-label">Absent?</span>
-      <button class="btn btn-followup" onclick="setAbsence('followup')">Follow up</button>
-      <button class="btn btn-excused" onclick="setAbsence('notsitting')">Not sitting</button>
+    <div class="paper-special">
+      <div class="special-label">Less often</div>
+      <div class="special-row">
+        ${flagBtn}
+        <span class="absence-label">Absent?</span>
+        <button class="btn btn-followup" onclick="setAbsence('followup')">Follow up</button>
+        <button class="btn btn-excused" onclick="setAbsence('notsitting')">Not sitting</button>
+      </div>
+      ${modBlock}
     </div>`;
   document.getElementById('noteInput').addEventListener('change', e => {
     const cc = ensureCell(a, s.id, pid); cc.note = e.target.value; cc.updatedAt = nowISO(); save(); renderRoster();

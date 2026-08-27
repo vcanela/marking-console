@@ -3,6 +3,18 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.10.0 — 2026-08-25
+
+- Reworked the Current Paper view for clearer grouping: the Sat-on date moves up
+  under the name; the logged trip hazards and the optional note sit together
+  under a Feedback heading; the two everyday actions (Mark done, Next unmarked)
+  are paired; and the rarely-used controls (Flag for moderation, and Absent
+  follow-up / not-sitting) are separated under a "Less often" heading.
+- Copy feedback prompt is renamed "Copy feedback" and tucked below the note. It
+  is unchanged: still the whole-assessment prompt for one student.
+- Each action button shows its keyboard shortcut in a tiny corner (Enter, n, u,
+  f) to help you learn them; hidden on touch devices.
+
 ## 1.9.0 — 2026-08-25
 
 - More colour on the dashboard, all from the Okabe-Ito palette and each keeping
