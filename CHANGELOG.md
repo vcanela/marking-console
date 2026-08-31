@@ -3,6 +3,14 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.10.2 — 2026-08-28
+
+- Fixed a timezone bug where a job whose sit date had arrived still read
+  "Upcoming" (and stayed out of the count, quota and runway) until about midday.
+  "Today" was computed in UTC, which is a day behind local time for much of the
+  New Zealand day; it now uses the local calendar date, so a job flips to current
+  the moment its sit date arrives. "Marked today" is derived the same way.
+
 ## 1.10.1 — 2026-08-25
 
 - Fixed the keyboard-shortcut hint overlapping the button label (most visible on

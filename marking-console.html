@@ -799,7 +799,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.10.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.10.2';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -971,8 +971,15 @@ function ensureHazardSet(a) {
 }
 const tagName = (a, tid) => (hazardsOf(a).find(t => t.id === tid) || {}).name || '?';
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function nowISO() { return new Date().toISOString(); }
+// Local calendar day (YYYY-MM-DD). Must be LOCAL, not UTC: dateSat/dueDate/satOn
+// come from <input type="date"> (local), so a UTC "today" reads a day behind for
+// most of the NZ day (UTC+12/13) and mislabels a job sat today as "upcoming".
+function localDay(d) {
+  const x = d ? new Date(d) : new Date();
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+function todayStr() { return localDay(); }
+function nowISO() { return new Date().toISOString(); }   // UTC timestamp, for sync ordering; day-of derived via localDay()
 function dueDaysLeft(a) {
   if (!a || !a.dueDate) return null;
   const end = new Date(a.dueDate + 'T23:59:59');
@@ -1002,7 +1009,7 @@ function assessmentStats(a) {
     denom += P;
     parts.forEach(p => {
       const c = cellOf(a, s.id, p.id);
-      if (c.done) { marked++; if (c.markedAt && c.markedAt.slice(0, 10) === today) markedToday++; }
+      if (c.done) { marked++; if (c.markedAt && localDay(c.markedAt) === today) markedToday++; }
     });
   });
   const remaining = denom - marked;

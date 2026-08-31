@@ -127,6 +127,13 @@ merges at the per-cell level (marking different parts on two devices both
 survive). `ui` is deliberately device-local (theme, current selections and the
 current part differ per device) and is excluded from the synced document.
 
+**Dates vs timestamps**: `nowISO()` stores UTC ISO strings for sync ordering,
+but any *calendar-day* comparison must use `localDay()`/`todayStr()` (LOCAL
+date), never `iso.slice(0,10)` (UTC). `dateSat`/`dueDate`/`satOn` come from
+`<input type="date">` and are local; comparing them to a UTC "today" reads a day
+behind for much of the NZ day (UTC+12/13), which once mislabelled a job sat
+today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
+
 ## Key behaviours (do not break these)
 
 1. **Labels and minimal identity**: rosters store only first name + last
