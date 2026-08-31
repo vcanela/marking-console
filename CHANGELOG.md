@@ -3,6 +3,17 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.11.0 — 2026-08-31
+
+- Job difficulty weight (1 Mechanical / 2 Average / 3 Tricky, default 2), set in
+  the job modal. The daily quota and the runway now count load points (papers ×
+  weight), so a tricky investigation pulls harder than a quick chunk; each job
+  shows its weight as a badge. Completion percent stays a plain paper count.
+- Cross out rest days on the runway: tap a day and choose "Rest day"; it greys
+  out with an X, carries no load, and its work shifts onto the days you keep.
+  The daily target then paces over working days, not calendar days. Rest days
+  sync across your devices.
+
 ## 1.10.2 — 2026-08-28
 
 - Fixed a timezone bug where a job whose sit date had arrived still read

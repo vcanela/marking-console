@@ -454,11 +454,38 @@
     content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
     width: 6px; height: 6px; border-radius: 50%; background: var(--info);
   }
+  /* rest day: crossed-out square, no load */
+  .rw-off .rw-sq { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--border); position: relative; }
+  .rw-off .rw-sq::before, .rw-off .rw-sq::after {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 78%; height: 1.5px; background: var(--faint);
+  }
+  .rw-off .rw-sq::before { transform: translate(-50%, -50%) rotate(45deg); }
+  .rw-off .rw-sq::after { transform: translate(-50%, -50%) rotate(-45deg); }
+  .rw-restbtn { font-family: var(--mono); font-size: 11px; background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--info); border-radius: 6px; padding: 2px 9px; cursor: pointer; margin-left: 6px; }
+  .rw-restbtn:hover { border-color: var(--info); }
   .runway-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px;
     font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 4px; flex-wrap: wrap; }
   .runway-legend { display: inline-flex; align-items: center; gap: 3px; }
   .rw-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px; }
   .runway-caption { font-size: 12px; color: var(--muted); margin-top: 9px; min-height: 1.3em; line-height: 1.5; }
+
+  /* Difficulty weight: badge (quota rows) and chip (job cards), coloured by weight. */
+  .dash-h-note { font-family: var(--mono); font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--faint); margin-left: 8px; }
+  .wbadge { font-family: var(--mono); font-size: 10px; font-weight: 600; border-radius: 4px; padding: 1px 5px; margin-left: 8px; vertical-align: middle; }
+  .wbadge.w1 { color: var(--faint); background: var(--panel-2); }
+  .wbadge.w2 { color: var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); }
+  .wbadge.w3 { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .job-chip.wchip.w1 { color: var(--faint); }
+  .job-chip.wchip.w2 { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, var(--border)); }
+  .job-chip.wchip.w3 { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  .weight-pick { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .weight-pick button {
+    flex: 1; min-width: 96px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 7px 10px; font-family: var(--mono); font-size: 12px; cursor: pointer;
+  }
+  .weight-pick button:hover { border-color: var(--muted); }
+  .weight-pick button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); }
 
   /* Keyboard shortcuts cheat-sheet */
   kbd { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600;
@@ -718,6 +745,12 @@
     <input type="date" id="jobSat">
     <label for="jobDue">Date marking is due (optional; drives the daily target)</label>
     <input type="date" id="jobDue">
+    <label>Difficulty (weights this job in the quota)</label>
+    <div class="weight-pick" id="jobWeight">
+      <button type="button" data-w="1">1 · Mechanical</button>
+      <button type="button" data-w="2">2 · Average</button>
+      <button type="button" data-w="3">3 · Tricky</button>
+    </div>
     <label for="jobParts">Parts, one per line (leave blank for a single-part assessment)</label>
     <textarea id="jobParts" placeholder="Section A&#10;Section B&#10;Section C"></textarea>
     <p class="sync-help" style="margin-top:-4px;">You mark one part across all students, then the next. Renaming a part keeps its marks; removing a part deletes its marks.</p>
@@ -799,7 +832,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.10.2';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.11.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -814,6 +847,7 @@ const blank = () => ({
   assessments: [],      // {id, classId, name, dateSat, dueDate, createdAt, updatedAt, hazardSet, parts:[...], marks:{sid:mark}}
   hazardSets: {},       // {setId: [{id, name, deleted?, updatedAt}]} trip-hazard sets; an assessment points at one via hazardSet
   hazardBank: [],       // [{id, name, year, hazards:[{id, name}], updatedAt}] reusable lists prepared ahead of marking; seeded into a job's set by copy
+  daysOff: {},          // {'YYYY-MM-DD': {off: 0|1, updatedAt}} rest days crossed out on the runway; synced (per-date newest wins)
   tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/bank entries
   ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due', archivedOpen: false },
   settings: {}
@@ -865,6 +899,7 @@ function normalize(d) {
   d.assessments = Array.isArray(d.assessments) ? d.assessments : [];
   d.hazardSets = (d.hazardSets && typeof d.hazardSets === 'object') ? d.hazardSets : {};
   d.hazardBank = Array.isArray(d.hazardBank) ? d.hazardBank : [];
+  d.daysOff = (d.daysOff && typeof d.daysOff === 'object') ? d.daysOff : {};
   d.tombstones = (d.tombstones && typeof d.tombstones === 'object') ? d.tombstones : {};
   d.meta = Object.assign({ deviceId: '', updatedAt: '' }, d.meta || {});
   if (!d.meta.deviceId) d.meta.deviceId = uid() + uid();
@@ -892,6 +927,7 @@ function normalize(d) {
     a.parts.forEach(p => { if (p.updatedAt == null) p.updatedAt = ''; });
     if (!a.marks || typeof a.marks !== 'object') a.marks = {};
     if (typeof a.archived !== 'boolean') a.archived = false;   // filed away from the active list; set by the teacher
+    if (![1, 2, 3].includes(a.weight)) a.weight = 2;           // difficulty; 2 = average default
     if (a.updatedAt == null) a.updatedAt = a.createdAt || '';
     if (!a.hazardSet) a.hazardSet = uid();               // each new/orphan assessment gets its own set
     if (!d.hazardSets[a.hazardSet]) d.hazardSets[a.hazardSet] = [];
@@ -985,6 +1021,24 @@ function dueDaysLeft(a) {
   const end = new Date(a.dueDate + 'T23:59:59');
   return Math.max(0, Math.ceil((end - new Date()) / 86400000));
 }
+// Days crossed out on the runway (rest days), keyed by local date; synced.
+function isDayOff(ds) { return !!(S.daysOff && S.daysOff[ds] && S.daysOff[ds].off); }
+function toggleDayOff(ds) {
+  if (!S.daysOff) S.daysOff = {};
+  const cur = S.daysOff[ds] && S.daysOff[ds].off;
+  S.daysOff[ds] = { off: cur ? 0 : 1, updatedAt: nowISO() };
+  save(); render();
+}
+// Working days from today to the deadline: calendar days-left minus days off.
+function workDaysLeft(a) {
+  const cal = dueDaysLeft(a);
+  if (cal === null || cal <= 0) return cal;   // null (no due date) or 0 (overdue) pass through
+  const base = new Date(); base.setHours(12, 0, 0, 0);
+  let off = 0;
+  for (let i = 0; i < cal; i++) { const d = new Date(base); d.setDate(base.getDate() + i); if (isDayOff(localDay(d))) off++; }
+  return Math.max(0, cal - off);
+}
+function jobWeight(a) { return [1, 2, 3].includes(a && a.weight) ? a.weight : 2; }
 function fmtDate(str) {
   if (!str) return '';
   const d = new Date(str + 'T12:00:00');
@@ -1014,13 +1068,19 @@ function assessmentStats(a) {
   });
   const remaining = denom - marked;
   const pct = denom ? Math.round(100 * marked / denom) : 0;
-  const dl = dueDaysLeft(a);
-  // Today's marked cells count toward today, so the target stays stable.
-  const dailyTarget = (dl && dl > 0) ? Math.ceil((remaining + markedToday) / dl) : null;
+  const dl = dueDaysLeft(a);          // calendar days to deadline (drives chips / urgency)
+  const wdl = workDaysLeft(a);        // working days (calendar minus rest days) drive pacing
+  const weight = jobWeight(a);        // 1 mechanical / 2 average / 3 tricky
+  // Paper target per day over working days; today's marked cells count toward it
+  // so it stays stable. When every remaining day is a rest day but the deadline
+  // has not passed, the whole remainder falls due (danger).
+  const dailyTarget = (wdl && wdl > 0) ? Math.ceil((remaining + markedToday) / wdl)
+    : (dl && dl > 0 && remaining > 0 ? (remaining + markedToday) : null);
+  const loadTarget = dailyTarget !== null ? dailyTarget * weight : null;   // effort points for today
   const complete = denom > 0 && remaining === 0;
   const upcoming = !!a.dateSat && a.dateSat > today && !complete;
   const submitted = students.length - followup - notsitting;
-  return { a, cls, parts: P, students: students.length, submitted, marked, followup, notsitting, markedToday, denom, remaining, pct, dl, dailyTarget, complete, upcoming };
+  return { a, cls, parts: P, students: students.length, submitted, marked, followup, notsitting, markedToday, denom, remaining, pct, dl, wdl, weight, dailyTarget, loadTarget, complete, upcoming };
 }
 
 // Progress of a single part: cells done over students expected to sit it.
@@ -1095,13 +1155,19 @@ function toggleTheme() {
 
 // The day's quota across every active job: cells marked today against the sum
 // of today's per-job targets. This is the number meant to pull you along.
+// Today's quota in load points (papers x job weight), so a tricky job pulls
+// harder than a mechanical one. `papers` keeps the raw count for context.
 function dailyQuota() {
-  let markedToday = 0, targetToday = 0;
-  S.assessments.filter(a => !a.archived).map(assessmentStats).forEach(x => { markedToday += x.markedToday; if (x.dailyTarget) targetToday += x.dailyTarget; });
+  let markedToday = 0, targetToday = 0, papers = 0;
+  S.assessments.filter(a => !a.archived).map(assessmentStats).forEach(x => {
+    markedToday += x.markedToday * x.weight;
+    papers += x.markedToday;
+    if (x.dailyTarget) targetToday += x.loadTarget;
+  });
   const toGo = Math.max(0, targetToday - markedToday);
   const pct = targetToday ? Math.min(100, Math.round(100 * markedToday / targetToday)) : (markedToday ? 100 : 0);
   const met = targetToday > 0 && markedToday >= targetToday;
-  return { markedToday, targetToday, toGo, pct, met };
+  return { markedToday, targetToday, toGo, pct, met, papers };
 }
 
 // Literary, not cheesy. Attributed, no exclamation marks. Easy to curate.
@@ -1135,8 +1201,8 @@ function renderHeader() {
   qf.style.width = q.pct + '%';
   qf.classList.toggle('met', q.met);
   document.getElementById('quotaLabel').textContent = q.targetToday
-    ? (q.met ? `today ${q.markedToday} / ${q.targetToday} · met` : `today ${q.markedToday} / ${q.targetToday} · ${q.toGo} to go`)
-    : `${q.markedToday} marked today`;
+    ? (q.met ? `today ${q.markedToday} / ${q.targetToday} load · met` : `today ${q.markedToday} / ${q.targetToday} load · ${q.toGo} to go`)
+    : `${q.papers} marked today`;
 }
 
 // ---------------- Dashboard (landing view) ----------------
@@ -1191,10 +1257,10 @@ function renderDashboard() {
     </section>
 
     <section class="dash-section">
-      <div class="dash-h">Today’s quota</div>
+      <div class="dash-h">Today’s quota <span class="dash-h-note">load points = papers × difficulty</span></div>
       <div class="dash-hero-top" style="margin-bottom:14px;">
         <span class="dash-bignum${q.met ? ' met' : ''}">${q.markedToday}${q.targetToday ? ` / ${q.targetToday}` : ''}</span>
-        <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} to go today, split by urgency below`) : 'set due dates on your jobs to get a daily quota'}</span>
+        <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} load to go today, split by urgency below`) : 'set due dates on your jobs to get a daily quota'}</span>
       </div>
       ${quotaRowsHtml(list)}
     </section>
@@ -1244,19 +1310,25 @@ function quotaRowsHtml(list) {
     .sort((x, y) => (x.a.dueDate || '9999-99-99').localeCompare(y.a.dueDate || '9999-99-99') || (x.a.createdAt || '').localeCompare(y.a.createdAt || ''));
   if (!jobs.length) return `<div class="quota-empty">No dated jobs to pace today. Add due dates so each job gets a daily share.</div>`;
   return jobs.map(x => {
-    const done = x.markedToday, target = x.dailyTarget;
+    const done = x.markedToday, target = x.dailyTarget;   // in papers (actionable)
     const pct = target ? Math.min(100, Math.round(100 * done / target)) : 0;
     const met = done >= target;
     // Colour the bar by urgency (soonest warm, later cool), reinforcing the sort.
     const urg = met ? 'met' : (x.dl <= 1 ? 'u-danger' : (x.dl <= 2 ? '' : 'u-later'));
+    const restNote = (x.wdl !== null && x.wdl < x.dl) ? ` · ${x.wdl}d you'll work` : '';
     return `<div class="quota-row">
       <div class="quota-row-head">
-        <span class="quota-job">${esc(x.cls ? x.cls.name : '')}<span class="job-class">${esc(x.a.name)}</span></span>
-        <span class="quota-row-num${met ? ' met' : ''}">${done}/${target} today${x.dl !== null ? ` · ${x.dl}d` : ''}</span>
+        <span class="quota-job">${esc(x.cls ? x.cls.name : '')}<span class="job-class">${esc(x.a.name)}</span>${weightBadge(x.weight)}</span>
+        <span class="quota-row-num${met ? ' met' : ''}">${done}/${target} today${x.dl !== null ? ` · ${x.dl}d` : ''}${restNote}</span>
       </div>
       <div class="progress-track sm"><div class="progress-fill${urg ? ' ' + urg : ''}" style="width:${pct}%"></div></div>
     </div>`;
   }).join('');
+}
+// Small difficulty badge, coloured by weight: 1 mechanical (muted) .. 3 tricky (warm).
+function weightBadge(w) {
+  const label = w === 1 ? 'mechanical' : w === 3 ? 'tricky' : 'average';
+  return `<span class="wbadge w${w}" title="Difficulty ${w}: ${label}">×${w}</span>`;
 }
 function setJobSort(mode) { S.ui.jobSort = mode; save(); render(); }
 
@@ -1280,7 +1352,7 @@ function progressRing(pct, size) {
 // days-left drops, tomorrow's squares quietly rise.
 let runwayDays = [];   // per-day detail for the click/tap caption, kept in step with the rendered strip
 let runwayPicked = -1;   // which day's caption is open, so a second tap closes it
-const RUNWAY_HINT = 'Tap a day to see the work it suggests.';
+const RUNWAY_HINT = 'Tap a day to see its work, or cross it out as a rest day.';
 function runwayHtml(list) {
   const jobs = list.filter(x => !x.complete && !x.upcoming && x.a.dueDate && x.dl > 0 && (x.remaining + x.markedToday) > 0);
   if (!jobs.length) { runwayDays = []; return ''; }
@@ -1291,42 +1363,50 @@ function runwayHtml(list) {
   const days = [];
   for (let i = 0; i < H; i++) {
     const d = new Date(base); d.setDate(base.getDate() + i);
-    days.push({ date: d, load: 0, jobs: [], due: false });
+    const ds = localDay(d);
+    days.push({ date: d, ds, off: isDayOff(ds), load: 0, papers: 0, jobs: [], due: false });
   }
   jobs.forEach(x => {
-    const rate = (x.remaining + x.markedToday) / x.dl;
-    for (let i = 0; i < x.dl && i < H; i++) {
-      days[i].load += rate;
-      days[i].jobs.push({ name: (x.cls ? x.cls.name + ' ' : '') + x.a.name, cells: rate });
-    }
+    // Spread over this job's working days only (rest days carry nothing); the
+    // shade is effort (papers x weight), so a tricky job burns hotter.
+    const idxs = [];
+    for (let i = 0; i < x.dl && i < H; i++) { if (!days[i].off) idxs.push(i); }
     if (x.dl - 1 < H) days[x.dl - 1].due = true;
+    if (!idxs.length) return;                              // no working days in view; the quota flags it
+    const rate = (x.remaining + x.markedToday) / idxs.length;
+    idxs.forEach(i => {
+      days[i].papers += rate;
+      days[i].load += rate * x.weight;
+      days[i].jobs.push({ name: (x.cls ? x.cls.name + ' ' : '') + x.a.name, weight: x.weight, cells: rate });
+    });
   });
   const max = Math.max(...days.map(d => d.load), 0);
   runwayDays = days.map(d => {
-    const total = d.load > 0 ? Math.max(1, Math.round(d.load)) : 0;   // a shaded day never reads as 0
-    const alloc = allocateCells(total, d.jobs.map(j => j.cells));      // split so the parts sum to the day total
+    const papers = d.papers > 0 ? Math.max(1, Math.round(d.papers)) : 0;   // a shaded day never reads as 0
+    const alloc = allocateCells(papers, d.jobs.map(j => j.cells));         // split so parts sum to the day total
     return {
       label: d.date.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }),
-      cells: total, due: d.due,
-      jobs: d.jobs.map((j, k) => ({ name: j.name, cells: alloc[k] })).filter(j => j.cells > 0)
+      ds: d.ds, off: d.off, cells: papers, due: d.due,
+      jobs: d.jobs.map((j, k) => ({ name: j.name, weight: j.weight, cells: alloc[k] })).filter(j => j.cells > 0)
     };
   });
   runwayPicked = -1;   // a re-render clears any open caption
   const cells = days.map((d, i) => {
-    const lvl = d.load <= 0 ? 0 : Math.min(4, Math.ceil((d.load / max) * 4));
+    const lvl = (d.off || d.load <= 0) ? 0 : Math.min(4, Math.ceil((d.load / max) * 4));
     const dow = d.date.getDay();
     const cl = ['rw-cell'];
     if (i === 0) cl.push('rw-today');
     if (d.due) cl.push('rw-due');
     if (dow === 0 || dow === 6) cl.push('rw-weekend');
+    if (d.off) cl.push('rw-off');
     const rd = runwayDays[i];
-    const title = `${rd.label}: ${rd.cells} cell${rd.cells === 1 ? '' : 's'}${d.due ? ' · due date' : ''}`;
+    const title = d.off ? `${rd.label}: rest day` : `${rd.label}: ${rd.cells} paper${rd.cells === 1 ? '' : 's'}${d.due ? ' · due date' : ''}`;
     return `<button class="${cl.join(' ')}" title="${esc(title)}" onclick="runwayPick(${i})"><span class="rw-sq rw-l${lvl}"></span></button>`;
   }).join('');
   return `
     <section class="dash-section">
       <div class="dash-h">Marking runway</div>
-      <div class="dash-bigsub" style="margin-bottom:10px;">Each day from today to your last deadline, if you keep the load flat. Rest a day and the rest quietly rise.</div>
+      <div class="dash-bigsub" style="margin-bottom:10px;">Each working day from today to your last deadline, shaded by effort (harder jobs burn hotter). Tap a day to cross it out as a rest day; its load shifts to the days you keep.</div>
       <div class="runway" role="img" aria-label="Projected marking load per day">${cells}</div>
       <div class="runway-foot">
         <span>${esc(runwayDays[0].label)} → ${esc(runwayDays[H - 1].label)}${capped ? ' · later deadlines continue past the edge' : ''}</span>
@@ -1352,8 +1432,10 @@ function runwayPick(i) {
   if (runwayPicked === i) { runwayPicked = -1; el.innerHTML = RUNWAY_HINT; return; }   // second tap closes it
   const d = runwayDays[i]; if (!d) return;
   runwayPicked = i;
-  const parts = d.jobs.length ? d.jobs.map(j => `${esc(j.name)} ${j.cells}`).join(' · ') : 'nothing due';
-  el.innerHTML = `<b>${esc(d.label)}</b>${d.due ? ' (a due date)' : ''}: ${d.cells} cell${d.cells === 1 ? '' : 's'} — ${parts}`;
+  const toggle = `<button class="rw-restbtn" onclick="toggleDayOff('${d.ds}')">${d.off ? '↺ Working day' : '✕ Rest day'}</button>`;
+  if (d.off) { el.innerHTML = `<b>${esc(d.label)}</b>: rest day, no marking planned. ${toggle}`; return; }
+  const parts = d.jobs.length ? d.jobs.map(j => `${esc(j.name)} ${j.cells}${j.weight > 1 ? ' ×' + j.weight : ''}`).join(' · ') : 'nothing due';
+  el.innerHTML = `<b>${esc(d.label)}</b>${d.due ? ' (a due date)' : ''}: ${d.cells} paper${d.cells === 1 ? '' : 's'} — ${parts} ${toggle}`;
 }
 
 // Shown on the dashboard only until the first marking job exists; it then
@@ -1381,6 +1463,8 @@ function jobCard(x) {
     chips.push(`<span class="job-chip left${urg}">${x.dl === 0 ? 'due today' : x.dl + ' day' + (x.dl === 1 ? '' : 's') + ' left'}</span>`);
   }
   if (x.upcoming) chips.push(`<span class="job-chip up">upcoming</span>`);
+  const wl = x.weight === 1 ? 'mechanical' : x.weight === 3 ? 'tricky' : 'average';
+  chips.push(`<span class="job-chip wchip w${x.weight}" title="Difficulty weights the quota">×${x.weight} ${wl}</span>`);
   const isArch = a.archived;
   // Left-stripe colour by state, matching the urgency language used elsewhere.
   const stateCls = isArch ? 's-idle'
@@ -2317,6 +2401,7 @@ function openJobModal(editId) {
     sel.value = a.classId; sel.disabled = true;           // class is fixed once a job exists
     nameEl.value = a.name; satEl.value = a.dateSat || ''; dueEl.value = a.dueDate || '';
     partsEl.value = (a.parts || []).map(p => p.name).join('\n');
+    setJobWeightPick(jobWeight(a));
     hazRow.hidden = false;
     document.getElementById('jobModalTitle').textContent = 'Edit marking job';
     document.getElementById('jobSaveBtn').textContent = 'Save changes';
@@ -2326,6 +2411,7 @@ function openJobModal(editId) {
     sel.disabled = false;
     if (S.classes[0]) sel.value = S.classes[0].id;
     nameEl.value = ''; satEl.value = ''; dueEl.value = ''; partsEl.value = '';
+    setJobWeightPick(2);                                   // default Average
     hazRow.hidden = false;
     document.getElementById('jobModalTitle').textContent = 'New marking job';
     document.getElementById('jobSaveBtn').textContent = 'Add job';
@@ -2333,6 +2419,13 @@ function openJobModal(editId) {
   updateJobHazardReadout();
   document.getElementById('jobOverlay').classList.add('open');
   nameEl.focus();
+}
+function setJobWeightPick(w) {
+  document.querySelectorAll('#jobWeight button').forEach(b => b.classList.toggle('on', +b.dataset.w === w));
+}
+function jobWeightPick() {
+  const on = document.querySelector('#jobWeight button.on');
+  return on ? +on.dataset.w : 2;
 }
 // How many hazards the job will have: the staged draft for a new job, or the
 // job's own live set when editing.
@@ -2390,12 +2483,13 @@ function saveJob() {
   const name = document.getElementById('jobName').value.trim();
   const sat = document.getElementById('jobSat').value;
   const due = document.getElementById('jobDue').value;
+  const weight = jobWeightPick();
   const names = parsePartNames();
   if (!name) { toast('Assessment needs a name'); return; }
   if (editingJobId) {
     const a = S.assessments.find(x => x.id === editingJobId);
     if (!a) { closeJobModal(); return; }
-    a.name = name; a.dateSat = sat || ''; a.dueDate = due || ''; a.updatedAt = nowISO();
+    a.name = name; a.dateSat = sat || ''; a.dueDate = due || ''; a.weight = weight; a.updatedAt = nowISO();
     reconcileParts(a, names);
     save(); closeJobModal(); render();
     toast('Job updated');
@@ -2410,7 +2504,7 @@ function saveJob() {
     // Trip hazards: its own new set, built from any names staged by import.
     const hazardSet = uid();
     S.hazardSets[hazardSet] = (jobHazardDraft || []).map(nm => ({ id: uid(), name: nm, updatedAt: now }));
-    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', createdAt: now, updatedAt: now, hazardSet, parts, marks };
+    const a = { id: uid(), classId, name, dateSat: sat || '', dueDate: due || '', weight, archived: false, createdAt: now, updatedAt: now, hazardSet, parts, marks };
     S.assessments.push(a);
     save(); closeJobModal(); render();
     toast(`${name} added to ${cls.name}`);
@@ -2488,6 +2582,7 @@ function dataTs() {
   const bump = t => { if (t && t > mx) mx = t; };
   Object.values(S.hazardSets || {}).forEach(list => (list || []).forEach(t => bump(t.updatedAt)));
   (S.hazardBank || []).forEach(e => bump(e.updatedAt));
+  Object.values(S.daysOff || {}).forEach(v => bump(v && v.updatedAt));
   S.classes.forEach(c => { bump(c.updatedAt); (c.students || []).forEach(s => bump(s.updatedAt)); });
   S.assessments.forEach(a => {
     bump(a.updatedAt);
@@ -2505,7 +2600,7 @@ function extractDoc(s) {
   return {
     meta: { deviceId: s.meta.deviceId, updatedAt: s.meta.updatedAt || '' },
     classes: s.classes, assessments: s.assessments, hazardSets: s.hazardSets || {},
-    hazardBank: s.hazardBank || [], tombstones: s.tombstones || {}, settings: s.settings
+    hazardBank: s.hazardBank || [], daysOff: s.daysOff || {}, tombstones: s.tombstones || {}, settings: s.settings
   };
 }
 function applyDoc(doc) {
@@ -2513,6 +2608,7 @@ function applyDoc(doc) {
   S.assessments = doc.assessments || [];
   S.hazardSets = doc.hazardSets || {};
   S.hazardBank = doc.hazardBank || [];
+  S.daysOff = doc.daysOff || {};
   S.tombstones = doc.tombstones || {};
   S.settings = Object.assign({}, S.settings, doc.settings || {});
   if (doc.meta && doc.meta.updatedAt && doc.meta.updatedAt > (S.meta.updatedAt || '')) S.meta.updatedAt = doc.meta.updatedAt;
@@ -2553,6 +2649,11 @@ function mergeDocs(a, b) {
   // place, so whole-entry newer-wins is enough and stays deterministic).
   const hazardBank = mergeById(a.hazardBank, b.hazardBank, (x, y) => newer(x, y));
 
+  // Rest days: per date, the newer toggle (off 0/1) wins.
+  const daysOff = {};
+  const addDO = src => { for (const [k, v] of Object.entries(src || {})) { if (!daysOff[k] || (v.updatedAt || '') > (daysOff[k].updatedAt || '')) daysOff[k] = v; } };
+  addDO(a.daysOff); addDO(b.daysOff);
+
   const classes = mergeById(a.classes, b.classes, (x, y) => {
     const base = newer(x, y);
     const sMap = new Map();
@@ -2589,7 +2690,7 @@ function mergeDocs(a, b) {
     deviceId: (a.meta && a.meta.deviceId) || (b.meta && b.meta.deviceId) || '',
     updatedAt: ((b.meta && b.meta.updatedAt || '') > (a.meta && a.meta.updatedAt || '')) ? b.meta.updatedAt : (a.meta && a.meta.updatedAt || '')
   };
-  return { classes, assessments, hazardSets, hazardBank, tombstones, settings, meta };
+  return { classes, assessments, hazardSets, hazardBank, daysOff, tombstones, settings, meta };
 }
 
 // Canonical serialisation so the gist content is identical whenever the data
@@ -2614,6 +2715,7 @@ function canonicalDoc(doc) {
     tombstones: doc.tombstones || {},
     hazardSets: sets,
     hazardBank: bank,
+    daysOff: doc.daysOff || {},
     classes: (doc.classes || []).slice().sort(byId),
     assessments: (doc.assessments || []).slice().sort(byId)
   };
@@ -2625,6 +2727,7 @@ function docString(doc) { return canonicalJSON(canonicalDoc(doc)); }
 function upgradeDoc(doc) {
   doc.hazardSets = (doc.hazardSets && typeof doc.hazardSets === 'object') ? doc.hazardSets : {};
   doc.hazardBank = Array.isArray(doc.hazardBank) ? doc.hazardBank : [];
+  doc.daysOff = (doc.daysOff && typeof doc.daysOff === 'object') ? doc.daysOff : {};
   if (Array.isArray(doc.tags) && doc.tags.length) {   // gist written before per-assessment sets
     doc.hazardSets.legacy = doc.hazardSets.legacy || doc.tags.map(t => ({ id: t.id, name: t.name, updatedAt: t.updatedAt || '' }));
     (doc.assessments || []).forEach(a => { if (!a.hazardSet) a.hazardSet = 'legacy'; });
@@ -2774,6 +2877,7 @@ document.getElementById('keysBtn').onclick = openHotkeys;
 document.getElementById('hotkeyCloseBtn').onclick = closeHotkeys;
 document.getElementById('hotkeyOverlay').addEventListener('click', e => { if (e.target.id === 'hotkeyOverlay') closeHotkeys(); });
 document.addEventListener('keydown', onHotkey);
+document.querySelectorAll('#jobWeight button').forEach(b => { b.onclick = () => setJobWeightPick(+b.dataset.w); });
 document.getElementById('markAllBtn').onclick = markAllRemaining;
 document.getElementById('tagAddBtn').onclick = addTag;
 document.getElementById('tagInput').addEventListener('keydown', e => { if (e.key === 'Enter') addTag(); });

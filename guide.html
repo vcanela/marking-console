@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.10.2</span>
+    <span class="ver" id="ver">Guide · v1.11.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -117,8 +117,10 @@
   <span class="lab">In the app</span>
   <p>Give each job its own due date when you create it. On the dashboard, <b class="k">Today's quota</b> splits the day across your jobs and orders them by urgency: the Sunday job gets the larger share and sits at the top of the list, with its own small bar of done-versus-target for today.</p>
   <p>Work down that list from the top and you stay on track for every deadline without doing the arithmetic yourself. A job with no due date has nothing to pace against, so it will not appear in the quota split; add a due date to any job you want the day planned around.</p>
-  <span class="lab">The runway</span>
-  <p>Below the quota, the <b class="k">Marking runway</b> shows the same plan stretched across the coming days: one square per day, from today to your last deadline, shaded darker where the load is heavier. The days before a close deadline run hottest because several jobs overlap there. Weekends are drawn as smaller squares, and each due date carries a dot above it; today has a ring. Hover or tap a square to see that day's cells and which jobs they come from, and tap again to close it. It is a flat-load suggestion, not a target, so if you rest a day the remaining squares simply rise a little to absorb it.</p>
+  <span class="lab">Difficulty</span>
+  <p>Not every paper is equal effort. When you create or edit a job, set its <b class="k">Difficulty</b>: <b>1</b> mechanical, <b>2</b> average, <b>3</b> tricky. The quota then counts <b class="k">load points</b> (papers × difficulty), so five tricky investigations weigh more than five quick chunks and rise up the list. It only changes pacing; the completion percentage stays a plain count of papers.</p>
+  <span class="lab">The runway, and rest days</span>
+  <p>Below the quota, the <b class="k">Marking runway</b> stretches the plan across the coming days: one square per day to your last deadline, shaded by effort (harder jobs burn hotter). Today has a ring, each due date a dot, weekends are smaller. <b>Tap a day</b> to see its work, or cross it out as a <b class="k">rest day</b>: a day you know you will not mark (a full teaching day, extracurriculars). It greys out with an X and its load shifts onto the days you keep, so the quota paces over the days you actually work. Rest days sync across your devices. Tap a crossed-out day again to restore it.</p>
 </section>
 
 <section data-view="parts" class="detail" hidden>
@@ -244,6 +246,13 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.11.0 — 2026-08-31</div>
+    <ul>
+      <li>Give each job a difficulty weight (1 mechanical to 3 tricky). The quota and runway now count load points (papers × weight), so heavy jobs are worth more.</li>
+      <li>Tap a day on the runway to cross it out as a rest day; the load shifts to the days you keep, and rest days sync across your devices.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.10.2 — 2026-08-28</div>
     <ul>

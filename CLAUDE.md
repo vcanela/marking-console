@@ -92,6 +92,7 @@ S = {
     id, classId, name,
     dateSat,                 // '' or 'YYYY-MM-DD'; a future date marks the job "upcoming"
     dueDate,                 // '' or 'YYYY-MM-DD'; drives that job's target
+    weight,                  // 1 mechanical | 2 average (default) | 3 tricky; scales load points in the quota/runway (behaviour 4)
     archived,                // bool; filed away from the active list and all headline figures (behaviour 16)
     createdAt, updatedAt,    // ISO strings
     hazardSet,               // id into S.hazardSets; assessments can share one set
@@ -116,8 +117,9 @@ S = {
   }],
   hazardSets: { [setId]: [{ id, name, deleted, updatedAt }] },  // per-assessment trip-hazard sets; assessments may share a set; deleted is a soft-delete tombstone (see behaviour 6)
   hazardBank: [{ id, name, year, hazards: [{ id, name }], updatedAt }],  // reusable hazard lists prepared ahead of marking; seeded into a job's set by copy, no student data
+  daysOff: { ['YYYY-MM-DD']: { off, updatedAt } },  // rest days crossed out on the runway; synced (per-date newest wins); off 0|1 (behaviour 14)
   tombstones: { [id]: deletedAtISO },// deleted class/assessment/bank-entry ids, so a merge cannot resurrect them
-  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort },  // device-local; NOT synced
+  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort, archivedOpen },  // device-local; NOT synced
   settings: {}   // currently unused
 }
 ```
@@ -161,14 +163,21 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
    Red is retired from absence. Set from the paper view; a followed-up student
    who later sits is marked present and given a `satOn` late date.
 4. **Daily target** (per assessment): `ceil((remaining + markedToday) /
-   dueDaysLeft)`, computed in `assessmentStats` in **cells** (student × part).
-   Cells marked today count toward today, so the target stays stable through
-   the day. Percentage and progress are cell-based too; for a single-part job a
-   cell equals a paper, so the numbers match the old behaviour. Each job has
-   its own due date; the dashboard sorts jobs into three groups (markable now,
-   then upcoming, then complete). A future `dateSat` marks a job "upcoming"
-   (nothing to mark yet). A student can sit late: `satOn` on their mark
-   overrides the job's `dateSat`, edited from the paper view.
+   workDaysLeft)`, computed in `assessmentStats` in **cells** (student × part).
+   `dl` = `dueDaysLeft` (calendar days, drives chips/urgency); `wdl` =
+   `workDaysLeft` = calendar days-left minus **rest days** (`isDayOff`), and
+   drives the paper target, so crossing out days concentrates the load onto the
+   days you keep (if every remaining day is off but the deadline has not passed,
+   the whole remainder falls due, danger). Cells marked today count toward today,
+   so the target stays stable through the day. **Load points** = paper target ×
+   the job's `weight` (1/2/3); `dailyQuota` sums load points across active dated
+   jobs so a tricky job counts more, and the runway shades by effort the same
+   way. Weight only scales pacing: **percentage and progress stay a plain paper
+   count** (`marked/denom`). Each job has its own due date; the dashboard sorts
+   jobs into three groups (markable now, then upcoming, then complete). A future
+   `dateSat` marks a job "upcoming" (nothing to mark yet). A student can sit
+   late: `satOn` on their mark overrides the job's `dateSat`, edited from the
+   paper view.
 5. **Mark done / un-tick**: `markDone` marks the current cell (tick animation,
    respects `prefers-reduced-motion`; green row flash; auto-advance after
    350 ms). It is reversible: a done cell shows an **Un-mark** button
@@ -239,7 +248,8 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
     (`mergeDocs`) is deterministic, commutative and idempotent, combining both
     sides by per-entity/per-cell `updatedAt` (hazard sets merge by set id, tags
     within a set by `updatedAt`; hazard-bank entries merge by id, newer entry
-    wins wholesale, deleted via tombstones) with tombstones for deletions, so
+    wins wholesale, deleted via tombstones; `daysOff` merges per date, newest
+    `updatedAt` wins) with tombstones for deletions, so
     two devices converge with no data loss and no forced conflict choice (mark
     Section A on one device and Section B on another and both survive).
     Auto-sync runs on open and debounced after edits; a header button and a Set
@@ -279,20 +289,22 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
     element, colour it by state from the semantic palette, do not invent a hue.
 14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
     a **forward** heat strip. For each active dated job it spreads
-    `remaining + markedToday` evenly across `dl` (days-left) and sums per day, so
-    it is the daily-quota maths projected across the whole horizon; the first
-    square agrees with Today's quota. Horizon runs today to the last due date,
-    clamped to [14, 35] days. Shade is `ceil(load/max * 4)` (relative to the
-    busiest day) over a `color-mix` ramp of `--accent` (a single-hue sequential
-    scale, kept clear of `--danger`); today is ringed, each due date carries a
-    `--info` dot above the square, and weekends render as smaller centred squares
-    (an inner `.rw-sq` holds the shade so its size can change). Hover shows a
-    `title`; click/tap toggles a caption open and shut (`runwayPick`/`runwayPicked`,
-    mobile-friendly). Per-day cells are split across jobs by
-    largest-remainder (`allocateCells`) so the parts always sum to the day total.
-    It is deliberately a standing suggestion, not a target: it recomputes from
-    live stats, so resting a day (remaining unchanged, `dl` down one) raises the
-    later squares. Hidden when no dated active job exists.
+    `remaining + markedToday` evenly across its **working days** (today to the
+    deadline, skipping `daysOff`) and sums the **effort** (papers × `weight`) per
+    day, so a tricky job burns hotter; the first square agrees with Today's quota.
+    Horizon runs today to the last due date, clamped to [14, 35] days. Shade is
+    `ceil(load/max * 4)` (relative to the busiest day) over a `color-mix` ramp of
+    `--accent` (a single-hue sequential scale, kept clear of `--danger`); today is
+    ringed, each due date carries a `--info` dot above the square, weekends render
+    as smaller centred squares (an inner `.rw-sq` holds the shade), and **rest
+    days** show a crossed-out `.rw-off` square with no load. Hover shows a `title`;
+    click/tap toggles a caption open and shut (`runwayPick`/`runwayPicked`,
+    mobile-friendly) that carries a **Rest day / Working day** toggle
+    (`toggleDayOff`, writes `S.daysOff`, synced). Per-day papers are split across
+    jobs by largest-remainder (`allocateCells`) so the parts sum to the day total.
+    It is a standing suggestion, not a target: it recomputes from live stats, so
+    resting a day (crossing it out, or letting `dl` fall) raises the other
+    squares. Hidden when no dated active job exists.
 15. **Keyboard shortcuts** (`onHotkey`, one global `keydown` listener; desktop):
     bare single keys, in the spirit of the lesson planner. Ignored while typing
     (input/textarea/select/contentEditable) and when any Ctrl/Cmd/Alt is held, so
@@ -386,9 +398,12 @@ set, at job creation, on edit, and while marking; confirm it is an additive
 copy that stays independent of the source and dedupes on re-import), deleting a
 hazard while marking (it clears from every paper and does not resurrect on
 sync), flagging a
-student for moderation with a comment, the marking runway (dated jobs shade a
-forward strip, per-day parts sum to the day total, hover/tap caption, hides with
-no dated jobs), the keyboard shortcuts (Enter marks and advances, [ ] step
+student for moderation with a comment, job difficulty weight (1/2/3 in the job
+modal; the quota reads in load points = papers × weight, badges show it,
+completion % stays a paper count), the marking runway (dated jobs shade a
+forward strip by effort, per-day parts sum to the day total, hover/tap caption,
+crossing out a rest day greys it with an X and lifts the other days, rest days
+sync, hides with no dated jobs), the keyboard shortcuts (Enter marks and advances, [ ] step
 students, ? opens the sheet, Esc blurs the notes box then keys work again, keys
 paused while typing), archiving (marking the last paper prompts to archive and
 names outstanding follow-ups/flags; Not yet keeps it active with an Archive
