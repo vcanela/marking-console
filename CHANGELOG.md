@@ -3,6 +3,13 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.12.1 — 2026-08-31
+
+- Fixed roster drag-to-reorder: the handle selected but the row would not move.
+  The drag captured the pointer on the handle, and reordering reparents the row
+  (which holds the handle), releasing the capture and freezing the drag. It now
+  captures on the stable list container, so dragging works on mouse and touch.
+
 ## 1.12.0 — 2026-08-31
 
 - Edit a class roster after creation, from the pencil in Set up: add students

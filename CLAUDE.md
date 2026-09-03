@@ -148,7 +148,9 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
    students by `alive`); **add** students (`addStudentsToClass`, appends with
    fresh ids, keeps existing labels, numbers clashes via `uniqueLabel`); and
    **drag to reorder** (`wireDragHandle`, pointer events, mouse+touch; bumps
-   `class.updatedAt` so the order syncs). Assessments read the roster live
+   `class.updatedAt` so the order syncs — it captures the pointer on the stable
+   `rows` container, not the handle, because reordering reparents the dragged
+   row and moving a captured element releases its capture and freezes the drag). Assessments read the roster live
    (`assessmentStats` iterates `classOf(a).students`, `markOf` returns a default
    for new ids), so a roster change flows to every job at once; a removed
    student's marks orphan in `a.marks` and are ignored. Existing pre-1.1.0
