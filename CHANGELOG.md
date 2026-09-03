@@ -3,6 +3,15 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.12.0 — 2026-08-31
+
+- Edit a class roster after creation, from the pencil in Set up: add students
+  (paste box), remove a student who has left (× on their row), and drag ⠿ to
+  reorder. Every marking job for that class updates from the list, so a new
+  student appears unmarked in each job and a removed one drops out. Removals are
+  tombstoned so they do not reappear on sync; reorders sync too. Renaming shown
+  labels still works, and existing labels are kept when you add students.
+
 ## 1.11.0 — 2026-08-31
 
 - Job difficulty weight (1 Mechanical / 2 Average / 3 Tricky, default 2), set in

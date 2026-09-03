@@ -141,11 +141,18 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
 1. **Labels and minimal identity**: rosters store only first name + last
    **initial** (a pasted full surname is reduced to its initial in `addClass`);
    entry order is kept (no sorting). Label is first name + initial
-   (`buildLabels`); students who would share a label are numbered, and the
-   **Set up class editor** (`classLabelEditor`, pencil on a class) lets the
-   teacher rename any shown `s.label` to tell them apart without adding a full
-   surname. Existing pre-1.1.0 classes keep whatever surname they had; the
-   change applies to newly added classes. Privacy by construction: only what
+   (`buildLabels`); students who would share a label are numbered. The **Set up
+   class editor** (`classLabelEditor`, pencil on a class) is a full roster
+   editor: rename any shown `s.label`; **remove** a student (`removeStudent`,
+   tombstoned so a sync merge cannot resurrect them — the class merge filters
+   students by `alive`); **add** students (`addStudentsToClass`, appends with
+   fresh ids, keeps existing labels, numbers clashes via `uniqueLabel`); and
+   **drag to reorder** (`wireDragHandle`, pointer events, mouse+touch; bumps
+   `class.updatedAt` so the order syncs). Assessments read the roster live
+   (`assessmentStats` iterates `classOf(a).students`, `markOf` returns a default
+   for new ids), so a roster change flows to every job at once; a removed
+   student's marks orphan in `a.marks` and are ignored. Existing pre-1.1.0
+   classes keep whatever surname they had. Privacy by construction: only what
    renders is stored, and only in localStorage.
 2. **Parts and part-by-part marking**: an assessment optionally splits into
    parts, edited from the job modal (one name per line; blank = single-part).
@@ -249,9 +256,11 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
     sides by per-entity/per-cell `updatedAt` (hazard sets merge by set id, tags
     within a set by `updatedAt`; hazard-bank entries merge by id, newer entry
     wins wholesale, deleted via tombstones; `daysOff` merges per date, newest
-    `updatedAt` wins) with tombstones for deletions, so
-    two devices converge with no data loss and no forced conflict choice (mark
-    Section A on one device and Section B on another and both survive).
+    `updatedAt` wins; a class's students merge by id, union preserving order,
+    with removed students dropped by the shared tombstone `alive` filter) with
+    tombstones for deletions, so two devices converge with no data loss and no
+    forced conflict choice (mark Section A on one device and Section B on another
+    and both survive).
     Auto-sync runs on open and debounced after edits; a header button and a Set
     up section drive it manually. Comparison and the gist body use a **canonical
     serialisation** (`docString`: sorted keys, entity arrays sorted by id,
@@ -387,7 +396,10 @@ that way, and add a recipe when a feature genuinely needs one.
 No test framework. Sanity check after changes:
 `node --check` on the extracted script block, then manual test of: first-run
 setup (add a class, then an assessment), roster paste with duplicate first
-names, a single-part job (mark/un-tick, absence follow-up vs not-sitting,
+names, editing a roster (pencil in Set up: add students appear unmarked in the
+class's jobs, remove drops a student from the jobs and is tombstoned so sync
+does not resurrect, drag reorders and the order syncs, custom labels survive an
+add), a single-part job (mark/un-tick, absence follow-up vs not-sitting,
 hazard toggle), a
 multi-part job (part bar, mark a part across students, auto-jump to the next
 part, per-part hazard counts), un-ticking from the roster box, Mark all

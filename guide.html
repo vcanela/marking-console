@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.11.0</span>
+    <span class="ver" id="ver">Guide · v1.12.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -93,6 +93,7 @@
     <button class="card-btn" data-go="bank"><span class="rb-title">Hazards ready before you start</span><span class="rb-teaser">Prepare a list from the schedule</span></button>
     <button class="card-btn" data-go="feedback"><span class="rb-title">Write feedback</span><span class="rb-teaser">Draft a comment with AI</span></button>
     <button class="card-btn" data-go="absent"><span class="rb-title">A student was away</span><span class="rb-teaser">Follow up vs not sitting</span></button>
+    <button class="card-btn" data-go="roster"><span class="rb-title">The class changed</span><span class="rb-teaser">Add, remove or reorder students</span></button>
     <button class="card-btn" data-go="moderation"><span class="rb-title">Moderation</span><span class="rb-teaser">Flag a paper and note why</span></button>
     <button class="card-btn" data-go="fixing"><span class="rb-title">Fixing a tick</span><span class="rb-teaser">Untick or change a mark</span></button>
     <button class="card-btn" data-go="keys"><span class="rb-title">Mark by keyboard</span><span class="rb-teaser">Shortcuts for a fast pass</span></button>
@@ -173,6 +174,15 @@
   <p>To resolve a follow-up: on the paper choose <b class="k">Will sit — clear</b> (they rejoin as a normal paper; set <b class="k">Sat on</b> to the later date and mark it when they sit) or <b class="k">Not sitting</b>. You can also clear it fast by clicking the status box next to their name in the roster.</p>
 </section>
 
+<section data-view="roster" class="detail" hidden>
+  <button class="back" data-go="home">← All recipes</button>
+  <h3>The class changed through the year</h3>
+  <p class="scenario">A new student joined 11PSC, another left, and you want the order to match how you read the room.</p>
+  <span class="lab">In the app</span>
+  <p>Open <b class="k">Set up</b> and click the pencil on the class. The roster editor lets you: <b class="k">add students</b> in the paste box at the bottom (one per line, first name and last initial); <b class="k">remove</b> one who has left with the <b class="h">×</b> on their row; and <b class="k">drag ⠿</b> a row up or down to reorder. It works the same on laptop and phone.</p>
+  <p>Every marking job for that class updates from the list straight away: a new student appears unmarked in each job, and a removed one drops out (their past marks in that class stop showing). Changes sync across your devices. This is also where you rename a shown label to tell two same-named students apart.</p>
+</section>
+
 <section data-view="moderation" class="detail" hidden>
   <button class="back" data-go="home">← All recipes</button>
   <h3>Flagging for moderation</h3>
@@ -246,6 +256,12 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.12.0 — 2026-08-31</div>
+    <ul>
+      <li>Edit a class roster any time (the pencil in Set up): add students, remove ones who have left, and drag to reorder. Every marking job for the class updates to match.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.11.0 — 2026-08-31</div>
     <ul>

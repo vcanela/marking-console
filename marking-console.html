@@ -348,11 +348,24 @@
   .cls-item .del:hover { color: var(--danger); }
   .label-editor { margin: -2px 0 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
   .label-editor-head { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-bottom: 8px; line-height: 1.5; }
-  .label-row { margin-bottom: 6px; }
+  .label-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .label-row:last-child { margin-bottom: 0; }
-  .label-row input { width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; padding: 6px 9px; }
+  .label-row input { flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 12px; padding: 6px 9px; }
   .label-row input:focus { outline: none; border-color: var(--accent); }
   .label-row.dup input { border-color: var(--accent); }
+  .label-row.dragging { opacity: 0.55; background: var(--panel-2); border-radius: 6px; }
+  .drag-handle { flex: 0 0 auto; touch-action: none; cursor: grab; background: none; border: none;
+    color: var(--faint); font-size: 13px; line-height: 1; padding: 4px 3px; }
+  .drag-handle:active { cursor: grabbing; }
+  .drag-handle:hover { color: var(--muted); }
+  .stu-remove { flex: 0 0 auto; background: none; border: none; color: var(--faint); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; }
+  .stu-remove:hover { color: var(--danger); }
+  .roster-add { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .roster-add label { display: block; font-family: var(--mono); font-size: 11px; color: var(--faint); margin-bottom: 5px; line-height: 1.5; }
+  .roster-add textarea { width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: var(--mono); font-size: 12px; padding: 6px 9px; min-height: 52px; resize: vertical; }
+  .roster-add textarea:focus { outline: none; border-color: var(--accent); }
+  .roster-add .btn { margin-top: 8px; padding: 6px 12px; font-size: 12px; }
   .cls-item .bank-year { color: var(--tag); font-size: 11px; }
   .cls-item .bank-name { color: var(--text); }
   .cls-item .bank-count { color: var(--faint); }
@@ -832,7 +845,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.11.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.12.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -2266,11 +2279,17 @@ function classLabelEditor(c) {
   c.students.forEach(s => { const key = s.first + '|' + s.last; counts[key] = (counts[key] || 0) + 1; });
   const head = document.createElement('div');
   head.className = 'label-editor-head';
-  head.textContent = 'Shown labels — rename any to tell students apart. Students who share a first name and initial are highlighted.';
+  head.textContent = 'Roster — drag ⠿ to reorder, rename a shown label, remove a student who has left, or add new ones below. Changes flow to every marking job for this class.';
   wrap.appendChild(head);
+  const rows = document.createElement('div');
+  rows.className = 'roster-rows';
   c.students.forEach(s => {
     const row = document.createElement('div');
     row.className = 'label-row' + (counts[s.first + '|' + s.last] > 1 ? ' dup' : '');
+    row.dataset.sid = s.id;
+    const handle = document.createElement('button');
+    handle.type = 'button'; handle.className = 'drag-handle'; handle.textContent = '⠿';
+    handle.title = 'Drag to reorder'; handle.setAttribute('aria-label', 'Drag to reorder');
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = s.label; inp.maxLength = 24; inp.setAttribute('aria-label', 'Shown label');
     inp.onchange = () => {
@@ -2279,10 +2298,93 @@ function classLabelEditor(c) {
       s.label = v; s.updatedAt = nowISO();
       save(); renderClassList(); render();
     };
-    row.appendChild(inp);
-    wrap.appendChild(row);
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'stu-remove'; rm.textContent = '×';
+    rm.title = 'Remove student'; rm.setAttribute('aria-label', 'Remove student');
+    rm.onclick = () => removeStudent(c.id, s.id);
+    row.append(handle, inp, rm);
+    wireDragHandle(handle, row, rows, c);
+    rows.appendChild(row);
   });
+  wrap.appendChild(rows);
+  const add = document.createElement('div');
+  add.className = 'roster-add';
+  const lab = document.createElement('label');
+  lab.textContent = 'Add students, one per line: first name and last initial';
+  const ta = document.createElement('textarea');
+  ta.id = 'addStu-' + c.id; ta.placeholder = 'Sophia K\nLiam P';
+  const btn = document.createElement('button');
+  btn.className = 'btn'; btn.textContent = 'Add students';
+  btn.onclick = () => addStudentsToClass(c.id);
+  add.append(lab, ta, btn);
+  wrap.appendChild(add);
   return wrap;
+}
+// Drag a roster row by its handle to reorder (pointer events: mouse and touch).
+function wireDragHandle(handle, row, rows, c) {
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    row.classList.add('dragging');
+    const move = ev => {
+      const others = [...rows.querySelectorAll('.label-row:not(.dragging)')];
+      const before = others.find(r => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+      if (before) rows.insertBefore(row, before); else rows.appendChild(row);
+    };
+    const up = () => {
+      row.classList.remove('dragging');
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      const order = [...rows.querySelectorAll('.label-row')].map(r => r.dataset.sid);
+      const map = new Map(c.students.map(s => [s.id, s]));
+      const next = order.map(id => map.get(id)).filter(Boolean);
+      if (next.map(s => s.id).join() !== c.students.map(s => s.id).join()) {
+        c.students = next; c.updatedAt = nowISO(); save(); renderClassList(); render();
+      }
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  });
+}
+// Remove a student from the class (and so from every job for it). Tombstoned so
+// a sync merge cannot resurrect them; their past marks drop out of view.
+function removeStudent(cid, sid) {
+  const c = S.classes.find(x => x.id === cid); if (!c) return;
+  const s = c.students.find(x => x.id === sid); if (!s) return;
+  if (!confirm(`Remove ${s.label} from ${c.name}? They drop out of this class's marking jobs.`)) return;
+  S.tombstones[sid] = nowISO();
+  c.students = c.students.filter(x => x.id !== sid);
+  c.updatedAt = nowISO();
+  save(); renderClassList(); render();
+}
+// A label unique within the set already taken (numbers clashes: "Emma B 2").
+function uniqueLabel(first, last, taken) {
+  const base = last ? first + ' ' + last : first;
+  let lab = base, n = 1;
+  while (taken.has(lab)) { n++; lab = base + ' ' + n; }
+  taken.add(lab); return lab;
+}
+// Append pasted names to a class, keeping existing students and their labels.
+function addStudentsToClass(cid) {
+  const c = S.classes.find(x => x.id === cid); if (!c) return;
+  const ta = document.getElementById('addStu-' + cid);
+  const raw = (ta ? ta.value : '').trim();
+  if (!raw) return;
+  const now = nowISO();
+  const taken = new Set(c.students.map(s => s.label));
+  const added = raw.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+    const parts = line.split(/\s+/);
+    const first = parts[0];
+    const last = parts.length > 1 ? parts[parts.length - 1].charAt(0).toUpperCase() : '';
+    return { id: uid(), first, last, label: uniqueLabel(first, last, taken), updatedAt: now };
+  });
+  if (!added.length) return;
+  c.students.push(...added);
+  c.updatedAt = now;
+  save(); renderClassList(); render();
+  toast(`Added ${added.length} student${added.length === 1 ? '' : 's'} to ${c.name}`);
 }
 // ---- Trip hazard bank: reusable lists prepared ahead of marking ----
 function renderHazardBank() {
@@ -2662,7 +2764,7 @@ function mergeDocs(a, b) {
     const order = [], seen = new Set();
     (base.students || []).forEach(s => { if (sMap.has(s.id)) { order.push(sMap.get(s.id)); seen.add(s.id); } });
     sMap.forEach((s, id) => { if (!seen.has(id)) order.push(s); });
-    return Object.assign({}, base, { students: order });
+    return Object.assign({}, base, { students: order.filter(alive) });   // removed students are tombstoned, not resurrected
   });
 
   const mergeMark = (mx, my) => {
