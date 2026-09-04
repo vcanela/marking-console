@@ -845,7 +845,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.12.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.12.2';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1558,8 +1558,13 @@ function renderPartBar() {
 }
 function selectPart(pid) {
   S.ui.currentPart = pid;
+  // Stay on the current student when switching parts, so marking every part for
+  // one student needs no re-navigating. Only pick a student if none is set (or
+  // the current one has left the class); gotoNextUnmarked handles the usual
+  // part-by-part-across-the-class flow.
   const a = curAssessment(); const c = curClass();
-  if (c) {
+  const onSameStudent = c && S.ui.currentStudent && c.students.some(s => s.id === S.ui.currentStudent);
+  if (c && !onSameStudent) {
     const first = c.students.find(s => !absent(markOf(a, s.id)) && !cellOf(a, s.id, pid).done)
       || c.students.find(s => !absent(markOf(a, s.id))) || c.students[0];
     S.ui.currentStudent = first ? first.id : null;

@@ -161,8 +161,11 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
    In a multi-part job a **part bar** (`renderPartBar`) selects the current
    part; you mark that part across all students, then move on, keeping one
    meter stick per part. When a part is finished, `gotoNextUnmarked` auto-jumps
-   to the next part with unmarked papers. Single-part jobs show no part bar and
-   behave as before.
+   to the next part with unmarked papers. Clicking a part tab (`selectPart`)
+   **keeps the current student** (only picks one if none is set or they have
+   left the class), so marking every part for one student needs no
+   re-navigating; the across-the-class flow is driven by `gotoNextUnmarked`, not
+   the tabs. Single-part jobs show no part bar and behave as before.
 3. **Absence, two kinds** (`mark.absence`, student-level; both keep the
    student out of the marking denominator, via `absent(m)`): `followup` means
    absent on the day and needs chasing, surfaced in **amber** (roster "!"

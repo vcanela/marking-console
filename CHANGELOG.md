@@ -3,6 +3,13 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.12.2 — 2026-08-31
+
+- Switching parts now keeps the student you are on, instead of jumping to the
+  first one. So you can mark every part for a single student without scrolling
+  back each time. Marking a part across the whole class is unchanged (Enter and
+  Next unmarked still carry you through, and auto-jump to the next part).
+
 ## 1.12.1 — 2026-08-31
 
 - Fixed roster drag-to-reorder: the handle selected but the row would not move.
