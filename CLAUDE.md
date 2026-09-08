@@ -276,8 +276,15 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
     students show a ⚑ in the roster; the flag and comment appear in the
     assessment data export as a moderation record.
 13. **Daily quota and motivation**: the dashboard's **Overall progress** is a
-    ring (`progressRing(pct, size)`, percentage centred) over active (non-archived)
-    cells; the per-job quota below it stays as sorted bars (rings lose the
+    ring (`progressRing(pct, size)`, percentage centred) over **sat**,
+    non-archived cells: `renderDashboard` splits `list` into `started`
+    (`!upcoming`) and `upcoming`, and the ring sums marked/denom over `started`
+    only, so a future batch of exams (a job whose `dateSat` has not arrived) does
+    not dump its full paper count into the denominator and read low against work
+    that cannot begin. The excluded upcoming papers stay visible as a subline
+    note (`upCells` = their remaining, with the job count); no started work reads
+    100% ("nothing to mark yet"). Completed sat jobs stay in the ring (genuine
+    progress). The per-job quota below it stays as sorted bars (rings lose the
     at-a-glance comparison there), and the runway stays linear (a countdown reads
     best as a line). `dailyQuota()` sums cells marked today and
     today's targets across all active jobs; a second header bar shows progress

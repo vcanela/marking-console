@@ -845,7 +845,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.12.2';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.13.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1238,9 +1238,18 @@ function renderDashboard() {
   const all = S.assessments.map(assessmentStats);
   const list = all.filter(x => !x.a.archived);
   const archived = all.filter(x => x.a.archived);
-  let marked = 0, denom = 0, remaining = 0, followup = 0;
-  list.forEach(x => { marked += x.marked; denom += x.denom; remaining += x.remaining; followup += x.followup; });
-  const pct = denom ? Math.round(100 * marked / denom) : 0;
+  let remaining = 0, followup = 0;
+  list.forEach(x => { remaining += x.remaining; followup += x.followup; });
+  // Overall progress rings only jobs that have been sat. An upcoming batch
+  // (future sit date) would otherwise dump its full cell count into the
+  // denominator and read low against work you cannot start yet; it is shown as
+  // a separate note instead. No started work reads 100% (nothing to mark yet).
+  const started = list.filter(x => !x.upcoming);
+  const upcoming = list.filter(x => x.upcoming);
+  let marked = 0, denom = 0;
+  started.forEach(x => { marked += x.marked; denom += x.denom; });
+  const pct = denom ? Math.round(100 * marked / denom) : 100;
+  const upCells = upcoming.reduce((n, x) => n + x.remaining, 0);
   const active = list.filter(x => !x.complete);
   const dued = active.map(x => x.a.dueDate).filter(Boolean).sort();
   const nextDue = dued.length ? dued[0] : '';
@@ -1265,7 +1274,7 @@ function renderDashboard() {
       <div class="dash-h">Overall progress</div>
       <div class="overall">
         ${progressRing(pct, 108)}
-        <span class="dash-bigsub">${marked} of ${denom} marked${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}</span>
+        <span class="dash-bigsub">${denom ? `${marked} of ${denom} marked` : 'nothing to mark yet'}${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}${upCells ? ` · ${upCells} upcoming in ${upcoming.length} job${upcoming.length === 1 ? '' : 's'}` : ''}</span>
       </div>
     </section>
 

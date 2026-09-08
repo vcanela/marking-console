@@ -3,6 +3,17 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.13.0 — 2026-09-07
+
+- Overall progress now counts only jobs that have been sat. A batch of exams
+  entered ahead of time (a future sit date) no longer dumps its full paper
+  count into the ring and drags the percentage down against work you cannot
+  start yet. The upcoming papers stay visible as a note beside the ring, for
+  example "20 upcoming in 1 job", so you keep sight of what is coming. When
+  every sat job is finished the ring reads 100% with that note; before anything
+  is sat it reads "nothing to mark yet". The tiles, quota and runway are
+  unchanged (the quota and runway already left upcoming jobs out).
+
 ## 1.12.2 — 2026-08-31
 
 - Switching parts now keeps the student you are on, instead of jumping to the
