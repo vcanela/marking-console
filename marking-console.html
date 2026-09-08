@@ -262,6 +262,42 @@
     color: var(--faint); margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
   .paper-copy { margin-top: 8px; }
   .paper-copy .btn { font-size: 12px; padding: 6px 12px; }
+  /* Marking timer strip: pace information, never a verdict. The gauge fills in
+     accent up to your typical time and continues in a muted tone past it, so an
+     overrun reads as a fact rather than a fault; --danger is deliberately not
+     used here, because the papers that run long are usually the ones that
+     deserve the extra thought. The focus block ends in --success: stopping on
+     time is the point of it. */
+  .mt-bar { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; margin-bottom: 14px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .mt-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mt-line.sub { justify-content: space-between; }
+  .mt-clock { font-family: var(--mono); font-size: 18px; font-weight: 600; color: var(--text);
+    font-variant-numeric: tabular-nums; min-width: 50px; }
+  .mt-clock.idle { color: var(--faint); }
+  .mt-btn { background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 5px; font-family: var(--mono); font-size: 10px; line-height: 1;
+    padding: 5px 6px; cursor: pointer; }
+  .mt-btn:hover { color: var(--text); border-color: var(--accent); }
+  .mt-btn.wide { padding: 5px 10px; font-size: 11px; }
+  .mt-gauge { position: relative; flex: 1 1 90px; height: 8px; border-radius: 5px; display: flex;
+    background: var(--panel); border: 1px solid var(--border); overflow: hidden; }
+  .mt-fill { flex: none; background: var(--accent); transition: width .4s linear; }
+  .mt-over { flex: none; background: var(--faint); transition: width .4s linear; }
+  .mt-tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .5; }
+  .mt-learn, .mt-meta, .mt-est, .mt-fnote { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .mt-est { color: var(--info); }
+  .mt-line.focus { border-top: 1px solid var(--border); padding-top: 6px; }
+  .mt-flabel { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--faint); }
+  .mt-fleft { font-family: var(--mono); font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .mt-fdone { font-family: var(--mono); font-size: 11.5px; color: var(--success); }
+  .mt-sel { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 5px; font-family: var(--mono); font-size: 11px; padding: 3px 4px; }
+  .mt-sel:focus { outline: none; border-color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) {
+    .mt-fill, .mt-over { transition: none; }
+  }
   .paper-actions.primary { margin-top: 16px; }
   .paper-actions.primary .btn-nav { padding-top: 9px; padding-bottom: 9px; font-size: 13px; }   /* pair in height with Mark done; L/R handled by has-hint */
   .paper-special { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -433,6 +469,10 @@
   .progress-track.lg { height: 12px; border-radius: 6px; }
   /* Overall progress ring */
   .overall { display: flex; align-items: center; gap: 20px; }
+  .overall-txt { display: flex; flex-direction: column; gap: 6px; }
+  /* Pace estimates read as information, so they carry --info like the other
+     derived readouts, and appear only once enough papers have been timed. */
+  .dash-pace { font-family: var(--mono); font-size: 12px; color: var(--info); }
   .pring { flex: 0 0 auto; }
   .ring-num { fill: var(--accent); font-family: var(--mono); font-weight: 600; }
   @media (max-width: 520px) { .overall { gap: 14px; } }
@@ -578,6 +618,7 @@
   }
   .btn-resume:hover { border-color: var(--accent); background: rgba(230, 159, 0, 0.10); }
   .cc-chip.cc-arch { color: var(--faint); }
+  .cc-chip.cc-time { color: var(--info); }
   .cc-actions { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
   .cc-actions .btn-resume { margin-left: 0; }
   .btn-arch {
@@ -845,14 +886,14 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.13.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.14.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
 const PART_ALL = '_all';
 
 const newMark = () => ({ absence: '', flag: false, flagNote: '', satOn: '', updatedAt: '', parts: {} });   // per student; absence: '' | 'followup' | 'notsitting'
-const newCell = () => ({ done: false, tags: [], note: '', markedAt: null, updatedAt: '' });   // per student-part
+const newCell = () => ({ done: false, tags: [], note: '', markedAt: null, ms: 0, updatedAt: '' });   // per student-part; ms = active marking time
 
 const blank = () => ({
   meta: { deviceId: uid() + uid(), updatedAt: '' },   // deviceId is per-browser; updatedAt tracks non-entity changes
@@ -862,7 +903,7 @@ const blank = () => ({
   hazardBank: [],       // [{id, name, year, hazards:[{id, name}], updatedAt}] reusable lists prepared ahead of marking; seeded into a job's set by copy
   daysOff: {},          // {'YYYY-MM-DD': {off: 0|1, updatedAt}} rest days crossed out on the runway; synced (per-date newest wins)
   tombstones: {},       // {entityId: deletedAtISO} for deleted classes/assessments/bank entries
-  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due', archivedOpen: false },
+  ui: { currentClass: null, currentAssessment: null, currentStudent: null, currentPart: null, view: 'dashboard', theme: 'dark', jobSort: 'due', archivedOpen: false, focusMin: 25, focusEnd: 0 },
   settings: {}
 });
 
@@ -890,7 +931,7 @@ function upgradeMark(m) {
     const out = { absence, flag: !!m.flag, flagNote: m.flagNote || '', satOn: m.satOn || '', updatedAt: m.updatedAt || '', parts: {} };
     Object.keys(m.parts).forEach(pid => {
       const c = m.parts[pid] || {};
-      out.parts[pid] = { done: !!c.done, tags: Array.isArray(c.tags) ? c.tags : [], note: c.note || '', markedAt: c.markedAt || null, updatedAt: c.updatedAt || '' };
+      out.parts[pid] = { done: !!c.done, tags: Array.isArray(c.tags) ? c.tags : [], note: c.note || '', markedAt: c.markedAt || null, ms: Math.max(0, Math.round(Number(c.ms) || 0)), updatedAt: c.updatedAt || '' };
     });
     return out;
   }
@@ -899,7 +940,7 @@ function upgradeMark(m) {
     flag: false, flagNote: '',
     satOn: m.satOn || '',
     updatedAt: m.updatedAt || m.markedAt || '',
-    parts: { [PART_ALL]: { done: m.status === 'marked', tags: Array.isArray(m.tags) ? m.tags : [], note: m.note || '', markedAt: m.markedAt || null, updatedAt: m.updatedAt || m.markedAt || '' } }
+    parts: { [PART_ALL]: { done: m.status === 'marked', tags: Array.isArray(m.tags) ? m.tags : [], note: m.note || '', markedAt: m.markedAt || null, ms: 0, updatedAt: m.updatedAt || m.markedAt || '' } }
   };
 }
 
@@ -947,6 +988,8 @@ function normalize(d) {
     Object.keys(a.marks).forEach(sid => { a.marks[sid] = upgradeMark(a.marks[sid]); });
   });
   d.ui = Object.assign({}, b.ui, d.ui || {});
+  if (!(Number(d.ui.focusMin) > 0)) d.ui.focusMin = 25;
+  if (!(Number(d.ui.focusEnd) > Date.now())) d.ui.focusEnd = 0;   // a block left over from a past session is simply over
   d.settings = {};   // calibration setting removed
   return d;
 }
@@ -1149,6 +1192,191 @@ function buildLabels(students) {
   });
 }
 
+// ---------------- Marking timer and pace ----------------
+// Two clocks. The CELL clock times the student-part on screen and writes its
+// milliseconds onto the cell when you mark it done, so typical times build up
+// across sessions and devices (cells merge whole, newest wins). The SESSION
+// clock totals your active time and drives the focus block.
+//
+// Both bank ACTIVE intervals only. When you go quiet for longer than IDLE_MS
+// the timer ends the interval at your LAST ACTIVITY rather than at now, so
+// walking away from the desk costs nothing instead of billing the gap to
+// whichever paper was open. Pointer movement counts as activity, so silence
+// really does mean away, not reading a long piece of working.
+const IDLE_MS = 10 * 60 * 1000;
+const MIN_SAMPLE = 3;              // fewer timed papers than this and an estimate is noise
+const T = {
+  cellKey: '',       // assessment|student|part; a change banks the old cell and resets the clock
+  cellMs: 0,         // banked active ms on the cell on screen
+  sessionMs: 0,      // banked active ms this session
+  since: 0,          // Date.now() the running interval began; 0 means not running
+  lastAct: 0,        // Date.now() of the last activity
+  paused: false,     // paused by hand
+  lastMs: 0,         // the lap just banked, for the "last" readout
+  focusDone: false   // the focus block has run out and not yet been acknowledged
+};
+
+function tStop(endAt) {
+  if (!T.since) return;
+  const add = Math.max(0, (endAt || Date.now()) - T.since);
+  T.cellMs += add; T.sessionMs += add; T.since = 0;
+}
+function tRun() {
+  if (T.since || T.paused || !T.cellKey) return;
+  T.since = Date.now(); T.lastAct = T.since;
+}
+function tCellMs() { return T.cellMs + (T.since ? Date.now() - T.since : 0); }
+function tSessionMs() { return T.sessionMs + (T.since ? Date.now() - T.since : 0); }
+
+// Any real input resumes the clock; the tick below is what notices idleness.
+function tActivity() {
+  T.lastAct = Date.now();
+  if (!T.since) tRun();
+}
+function toggleTimerPause() {
+  if (T.paused) { T.paused = false; T.lastAct = Date.now(); tRun(); }
+  else { tStop(); T.paused = true; }
+  renderPaper();
+}
+// One hook for every navigation path (roster, next unmarked, part tabs, steps):
+// if the cell on screen changed, bank the old lap and start a fresh clock.
+function tSyncCell() {
+  const a = curAssessment(), s = curStudent();
+  const markable = a && s && S.ui.view === 'workspace' && !absent(markOf(a, s.id));
+  const key = markable ? `${a.id}|${s.id}|${curPart()}` : '';
+  if (key === T.cellKey) return;
+  tStop();
+  T.cellKey = key; T.cellMs = 0;
+  tRun();
+}
+
+// Median, not mean: one paper interrupted by a phone call would drag a mean up
+// and leave every estimate pessimistic for the rest of the job.
+function median(ns) {
+  if (!ns.length) return 0;
+  const v = ns.slice().sort((x, y) => x - y);
+  const h = v.length >> 1;
+  return v.length % 2 ? v[h] : Math.round((v[h - 1] + v[h]) / 2);
+}
+function timedMsIn(a, pid) {
+  const cls = classOf(a);
+  if (!cls) return [];
+  const out = [];
+  cls.students.forEach(s => {
+    if (absent(markOf(a, s.id))) return;
+    const cell = cellOf(a, s.id, pid);
+    if (cell.done && cell.ms > 0) out.push(cell.ms);
+  });
+  return out;
+}
+// Typical time for one cell of a part: that part's own median once it has
+// enough timed papers, else the job's median, else nothing (stay quiet).
+function typicalMs(a, pid) {
+  const own = timedMsIn(a, pid);
+  if (own.length >= MIN_SAMPLE) return median(own);
+  const all = jobTimedMs(a);
+  return all.length >= MIN_SAMPLE ? median(all) : 0;
+}
+function jobTimedMs(a) { return partsOf(a).reduce((acc, p) => acc.concat(timedMsIn(a, p.id)), []); }
+function jobTypicalMs(a) { const all = jobTimedMs(a); return all.length >= MIN_SAMPLE ? median(all) : 0; }
+function partRemaining(a, pid) { const st = partStats(a, pid); return Math.max(0, st.denom - st.done); }
+// Time left at your typical pace: for one part, and for a whole job.
+function pacePartMs(a, pid) { const t = typicalMs(a, pid); return t ? t * partRemaining(a, pid) : 0; }
+function paceJobMs(a) {
+  let ms = 0, known = false;
+  partsOf(a).forEach(p => {
+    const t = typicalMs(a, p.id);
+    if (!t) return;
+    ms += t * partRemaining(a, p.id); known = true;
+  });
+  return { ms, known };
+}
+// Across every active job: what is still owed, and what today's quota costs.
+function paceTotals() {
+  let left = 0, today = 0, known = false;
+  S.assessments.forEach(a => {
+    if (a.archived) return;
+    const st = assessmentStats(a);
+    if (st.complete || st.upcoming) return;
+    const e = paceJobMs(a);
+    if (e.known) { left += e.ms; known = true; }
+    const t = jobTypicalMs(a);
+    if (t && st.dailyTarget) today += Math.min(t * st.dailyTarget, e.known ? e.ms : Infinity);
+  });
+  return { left, today, known };
+}
+
+function fmtClock(ms) {
+  const t = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+function fmtSpan(ms) {
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return 'under a minute';
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+// ---- Focus block (pomodoro). Its job is to tell you when to STOP, so it ends
+// in green with a break, not in alarm. The end time is absolute and kept in ui,
+// so a reload resumes the block you are in.
+function startFocus() {
+  const mins = Math.max(1, Number(S.ui.focusMin) || 25);
+  S.ui.focusMin = mins;
+  S.ui.focusEnd = Date.now() + mins * 60000;
+  T.focusDone = false;
+  document.title = 'Marking Console';
+  save(); renderPaper();
+}
+function stopFocus() {
+  S.ui.focusEnd = 0; T.focusDone = false;
+  document.title = 'Marking Console';
+  save(); renderPaper();
+}
+function setFocusMin(v) {
+  S.ui.focusMin = Math.max(1, Number(v) || 25);
+  save();
+  if (!S.ui.focusEnd) renderPaper();
+}
+function checkFocus() {
+  if (!S.ui.focusEnd || T.focusDone) return;
+  if (Date.now() < S.ui.focusEnd) return;
+  T.focusDone = true;
+  document.title = 'Break time · Marking Console';   // visible from another tab
+  toast('Focus block done. Stand up and look out a window; the marking will keep.');
+  renderPaper();
+}
+
+// The 1 Hz tick. It must never call render(): renderPaper() rebuilds the notes
+// textarea through innerHTML, so a per-second re-render would destroy it and
+// steal the caret while you type. So this only writes text and widths onto
+// nodes that already exist.
+function tick() {
+  if (T.since && Date.now() - T.lastAct > IDLE_MS) tStop(T.lastAct);   // roll back to last activity
+  paintTimer();
+  checkFocus();
+}
+function paintTimer() {
+  const clock = document.getElementById('mtClock');
+  if (!clock) return;                       // not on a markable paper
+  clock.textContent = fmtClock(tCellMs());
+  clock.classList.toggle('idle', !T.since);
+  const ses = document.getElementById('mtSession');
+  if (ses) ses.textContent = fmtClock(tSessionMs());
+  const fill = document.getElementById('mtFill');
+  if (fill) {
+    const typ = Number(fill.dataset.typ) || 0;
+    const scale = typ * 1.6;
+    const el = tCellMs();
+    fill.style.width = `${Math.min(100, 100 * Math.min(el, typ) / scale)}%`;
+    const over = document.getElementById('mtOver');
+    if (over) over.style.width = `${Math.max(0, 100 * (Math.min(el, scale) - typ) / scale)}%`;
+  }
+  const fc = document.getElementById('mtFocusLeft');
+  if (fc && S.ui.focusEnd) fc.textContent = fmtClock(Math.max(0, S.ui.focusEnd - Date.now()));
+}
+
 // ---------------- Rendering ----------------
 function render() {
   const view = (S.ui.view === 'workspace') ? 'workspace' : 'dashboard';
@@ -1254,6 +1482,7 @@ function renderDashboard() {
   const dued = active.map(x => x.a.dueDate).filter(Boolean).sort();
   const nextDue = dued.length ? dued[0] : '';
   const q = dailyQuota();
+  const pace = paceTotals();   // time left, and what today's quota costs, at your typical pace
 
   // Jobs sorted into three groups: markable now, then upcoming (not yet sat),
   // then completed. Within a group, by due date or by class per the toggle.
@@ -1274,7 +1503,10 @@ function renderDashboard() {
       <div class="dash-h">Overall progress</div>
       <div class="overall">
         ${progressRing(pct, 108)}
-        <span class="dash-bigsub">${denom ? `${marked} of ${denom} marked` : 'nothing to mark yet'}${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}${upCells ? ` · ${upCells} upcoming in ${upcoming.length} job${upcoming.length === 1 ? '' : 's'}` : ''}</span>
+        <div class="overall-txt">
+          <span class="dash-bigsub">${denom ? `${marked} of ${denom} marked` : 'nothing to mark yet'}${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}${upCells ? ` · ${upCells} upcoming in ${upcoming.length} job${upcoming.length === 1 ? '' : 's'}` : ''}</span>
+          ${pace.known && pace.left ? `<span class="dash-pace">about ${fmtSpan(pace.left)} of marking left at your pace</span>` : ''}
+        </div>
       </div>
     </section>
 
@@ -1283,6 +1515,7 @@ function renderDashboard() {
       <div class="dash-hero-top" style="margin-bottom:14px;">
         <span class="dash-bignum${q.met ? ' met' : ''}">${q.markedToday}${q.targetToday ? ` / ${q.targetToday}` : ''}</span>
         <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} load to go today, split by urgency below`) : 'set due dates on your jobs to get a daily quota'}</span>
+        ${(!q.met && pace.today) ? `<span class="dash-pace">today’s target ≈ ${fmtSpan(pace.today)} of marking</span>` : ''}
       </div>
       ${quotaRowsHtml(list)}
     </section>
@@ -1504,6 +1737,9 @@ function jobCard(x) {
   else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
   else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
   const missChip = x.followup ? `<span class="cc-chip followup">${x.followup} to follow up</span>` : '';
+  // Time left on this job at your typical pace; silent until enough papers are timed.
+  const jp = (isArch || x.complete || x.upcoming) ? { known: false, ms: 0 } : paceJobMs(a);
+  const timeChip = (jp.known && jp.ms) ? `<span class="cc-chip cc-time" title="At your typical pace for this job">~${fmtSpan(jp.ms)}</span>` : '';
   const resumeBtn = `<button class="btn-resume" onclick="openAssessment('${a.id}')">${x.complete ? 'Review' : 'Resume ›'}</button>`;
   const archBtn = isArch
     ? `<button class="btn-arch" onclick="unarchiveAssessment('${a.id}')">Unarchive</button>`
@@ -1518,7 +1754,7 @@ function jobCard(x) {
       </span>
     </div>
     <div class="job-chips">${chips.join('')}</div>
-    <div class="class-card-foot">${pace}${missChip}<span class="cc-actions">${archBtn}${resumeBtn}</span></div>
+    <div class="class-card-foot">${pace}${timeChip}${missChip}<span class="cc-actions">${archBtn}${resumeBtn}</span></div>
   </div>`;
 }
 function archiveAssessment(aid) {
@@ -1745,7 +1981,9 @@ function toggleDoneFor(sid) {
   const cell = ensureCell(a, sid, curPart());
   cell.done = !cell.done;
   cell.markedAt = cell.done ? nowISO() : null;
+  if (!cell.done) cell.ms = 0;   // a correction discards the recorded time; this path was never timed
   cell.updatedAt = nowISO();
+  if (sid === S.ui.currentStudent) { T.cellMs = 0; T.since = 0; }   // fresh clock for the paper on screen
   save(); render();
   if (cell.done) { const aid = a.id; setTimeout(() => maybePromptArchive(aid, wasComplete), 80); }
 }
@@ -1769,11 +2007,83 @@ function markAllRemaining() {
   setTimeout(() => maybePromptArchive(aid, wasComplete), 80);
 }
 
+// The timing strip above the paper: cell clock, a gauge filling toward your
+// typical time for this part, the pace estimates, and the focus block.
+function timerBarHtml(a, cell) {
+  const pid = curPart();
+  const typ = typicalMs(a, pid);
+  const timed = timedMsIn(a, pid).length;
+  const partLeft = pacePartMs(a, pid);
+  const jobLeft = paceJobMs(a);
+
+  let mid;
+  if (cell.done) {
+    mid = `<span class="mt-learn">${cell.ms ? `marked in ${fmtClock(cell.ms)}` : 'marked'}</span>`;
+  } else if (typ) {
+    // The tick sits at the typical time; the bar runs to 1.6× it, so an
+    // overrun stays visible instead of pinning at the end.
+    mid = `<div class="mt-gauge" title="Filling toward your typical ${fmtClock(typ)} for this part. Past the mark is information, not a fault: a hard paper earns the time.">
+        <div class="mt-fill" id="mtFill" data-typ="${typ}" style="width:0%"></div>
+        <div class="mt-over" id="mtOver" style="width:0%"></div>
+        <div class="mt-tick" style="left:62.5%"></div>
+      </div>`;
+  } else {
+    mid = `<span class="mt-learn">learning your pace · ${timed} of ${MIN_SAMPLE} timed</span>`;
+  }
+
+  const bits = [];
+  if (typ) bits.push(`typical ${fmtClock(typ)}`);
+  if (T.lastMs) bits.push(`last ${fmtClock(T.lastMs)}`);
+  bits.push(`session <span id="mtSession">${fmtClock(tSessionMs())}</span>`);
+  const est = [];
+  if (isMultiPart(a) && partLeft) est.push(`part ~${fmtSpan(partLeft)}`);
+  if (jobLeft.known && jobLeft.ms) est.push(`job ~${fmtSpan(jobLeft.ms)}`);
+
+  return `<div class="mt-bar">
+    <div class="mt-line">
+      <span class="mt-clock${T.since ? '' : ' idle'}" id="mtClock" title="Active time on this paper. It stops itself if you step away, and does not count the gap.">${fmtClock(tCellMs())}</span>
+      <button class="mt-btn" onclick="toggleTimerPause()" title="${T.paused ? 'Resume timing' : 'Pause timing'}">${T.paused ? '▶' : '❚❚'}</button>
+      ${mid}
+    </div>
+    <div class="mt-line sub">
+      <span class="mt-meta">${bits.join(' · ')}</span>
+      ${est.length ? `<span class="mt-est" title="Time left at your typical pace">${est.join(' · ')}</span>` : ''}
+    </div>
+    ${focusHtml()}
+  </div>`;
+}
+// The focus block ends in green with a break, not in alarm: stopping on time is
+// the point of it.
+function focusHtml() {
+  if (T.focusDone) {
+    return `<div class="mt-line focus done">
+      <span class="mt-fdone">✓ Block done, take a break</span>
+      <button class="mt-btn wide" onclick="startFocus()">Another ${Number(S.ui.focusMin) || 25}m</button>
+      <button class="mt-btn" onclick="stopFocus()" title="Clear">×</button>
+    </div>`;
+  }
+  if (S.ui.focusEnd) {
+    return `<div class="mt-line focus">
+      <span class="mt-flabel">Focus</span>
+      <span class="mt-fleft" id="mtFocusLeft">${fmtClock(Math.max(0, S.ui.focusEnd - Date.now()))}</span>
+      <span class="mt-fnote">left in this block</span>
+      <button class="mt-btn" onclick="stopFocus()" title="End the block">×</button>
+    </div>`;
+  }
+  const opts = [15, 25, 45, 60].map(v => `<option value="${v}"${(Number(S.ui.focusMin) || 25) === v ? ' selected' : ''}>${v}m</option>`).join('');
+  return `<div class="mt-line focus">
+    <span class="mt-flabel">Focus</span>
+    <select class="mt-sel" onchange="setFocusMin(this.value)">${opts}</select>
+    <button class="mt-btn wide" onclick="startFocus()">Start block</button>
+  </div>`;
+}
+
 function renderPaper() {
   const holder = document.getElementById('paperPanel');
   const a = curAssessment();
   const c = curClass();
   const s = curStudent();
+  tSyncCell();   // one hook: any change of paper or part banks the old lap and restarts the clock
   if (!S.classes.length) {
     holder.innerHTML = `<div class="empty-state">No classes set up yet.<br>
       <button class="btn" onclick="openSettings()">Open Set up</button></div>`;
@@ -1838,6 +2148,7 @@ function renderPaper() {
        <textarea id="flagInput" placeholder="Why is this flagged? Kept in the assessment data export.">${esc(m.flagNote || '')}</textarea></div>`
     : '';
   holder.innerHTML = `
+    ${timerBarHtml(a, cell)}
     <div class="paper-pos">${posLine}</div>
     <div class="paper-name">${esc(s.label)}<span class="cls">${esc(c.name)}</span></div>
     ${satRow}
@@ -1869,6 +2180,7 @@ function renderPaper() {
   if (fi) fi.addEventListener('change', e => {
     const mm = ensureMark(a, s.id); mm.flagNote = e.target.value; mm.updatedAt = nowISO(); save();
   });
+  paintTimer();   // fill the clock and gauge for the freshly built nodes
 }
 
 function renderTags() {
@@ -2032,6 +2344,9 @@ function markDone() {
   const wasComplete = assessmentStats(a).complete;
   const cell = ensureCell(a, s.id, curPart());
   cell.done = true;
+  tStop();                                      // bank the running interval: this is the lap
+  cell.ms = Math.max(0, Math.round(T.cellMs));
+  T.lastMs = cell.ms;
   cell.markedAt = nowISO();
   cell.updatedAt = nowISO();
   save();
@@ -2073,7 +2388,8 @@ function unmarkCell() {
   const a = curAssessment(); const s = curStudent();
   if (!a || !s) return;
   const cell = ensureCell(a, s.id, curPart());
-  cell.done = false; cell.markedAt = null; cell.updatedAt = nowISO();
+  cell.done = false; cell.markedAt = null; cell.ms = 0; cell.updatedAt = nowISO();
+  T.cellMs = 0; T.since = 0; tRun();   // re-marking starts a fresh lap
   save(); render();
 }
 
@@ -3035,6 +3351,23 @@ document.getElementById('verLink').textContent = 'v' + VERSION;
 // First run: open settings automatically so classes can be added.
 if (!S.classes.length) openSettings();
 render();
+
+// Marking timer: what counts as being at the desk, and the 1 Hz tick. Pointer
+// movement is throttled to once a second, so reading a long answer with the
+// mouse resting still registers as present without flooding the handler.
+let lastMove = 0;
+['keydown', 'pointerdown', 'wheel'].forEach(ev =>
+  document.addEventListener(ev, tActivity, { passive: true }));
+document.addEventListener('pointermove', () => {
+  const n = Date.now();
+  if (n - lastMove < 1000) return;
+  lastMove = n; tActivity();
+}, { passive: true });
+setInterval(tick, 1000);
+// Browsers throttle timers in a hidden tab, so the strip can be a few seconds
+// stale when you come back. The elapsed time itself is derived from timestamps,
+// not accumulated by the tick, so only the display lags: repaint on return.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
 // Pull and merge on launch, so opening the app on either device brings in
 // whatever the other one did. Runs after first paint; failures are silent.

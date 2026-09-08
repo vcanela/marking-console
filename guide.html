@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.13.0</span>
+    <span class="ver" id="ver">Guide · v1.14.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -97,6 +97,7 @@
     <button class="card-btn" data-go="moderation"><span class="rb-title">Moderation</span><span class="rb-teaser">Flag a paper and note why</span></button>
     <button class="card-btn" data-go="fixing"><span class="rb-title">Fixing a tick</span><span class="rb-teaser">Untick or change a mark</span></button>
     <button class="card-btn" data-go="keys"><span class="rb-title">Mark by keyboard</span><span class="rb-teaser">Shortcuts for a fast pass</span></button>
+    <button class="card-btn" data-go="pace"><span class="rb-title">How long will this take?</span><span class="rb-teaser">The timer, your pace, focus blocks</span></button>
     <button class="card-btn" data-go="archive"><span class="rb-title">Filing finished work</span><span class="rb-teaser">Archive a completed job</span></button>
     <button class="card-btn" data-go="onpaper"><span class="rb-title">Marked on paper already</span><span class="rb-teaser">Record a batch at once</span></button>
     <button class="card-btn" data-go="sync"><span class="rb-title">Two devices</span><span class="rb-teaser">Laptop and phone in sync</span></button>
@@ -184,6 +185,22 @@
   <p>Every marking job for that class updates from the list straight away: a new student appears unmarked in each job, and a removed one drops out (their past marks in that class stop showing). Changes sync across your devices. This is also where you rename a shown label to tell two same-named students apart.</p>
 </section>
 
+<section data-view="pace" class="detail" hidden>
+  <button class="back" data-go="home">← All recipes</button>
+  <h3>How long will this take?</h3>
+  <p class="scenario">It is Saturday, 90 papers are waiting, and you want to know whether tonight is enough, or whether you are slowing down.</p>
+  <span class="lab">In the app</span>
+  <p>Nothing to switch on. Above each paper a strip shows the clock for the paper you are on. When you press <b class="k">Mark done</b> that time is kept as a lap on that paper, and the strip starts reporting your typical time for that part.</p>
+  <p>The bar fills toward your typical time, with a tick where the typical sits. Passing the tick is not a failure: it keeps filling in grey, because the papers that take longer are usually the ones that need the thought. It is there to show you where you are, not to hurry you past a difficult script.</p>
+  <span class="lab">What it tells you</span>
+  <p>After three timed papers in a part you get estimates: <b class="i">part ~28m · job ~1h 10m</b> in the strip, <b class="i">about 3h 20m of marking left at your pace</b> under Overall progress on the dashboard, the rough time cost of today's quota, and a <b class="i">~1h 10m</b> chip on each job card. Before three papers it says "learning your pace" and estimates nothing rather than guessing.</p>
+  <p>Typical times use the middle value, not the average, so one paper interrupted by a phone call does not throw off everything after it.</p>
+  <span class="lab">Focus blocks</span>
+  <p>Pick 15, 25, 45 or 60 minutes and press <b class="k">Start block</b>. The strip counts down, and at the end it turns green and says to take a break; the browser tab title changes too, so you notice even from another tab. Finishing a block is the achievement, not beating it.</p>
+  <span class="lab">If you step away</span>
+  <p>You do not need to remember to pause. After ten minutes with no typing or mouse movement the timer winds back to the last thing you did, so a coffee break, or a whole afternoon away, is not charged to whichever paper was open. There is a pause button if you want it. Papers ticked with <b class="k">Mark all</b>, or from the roster box, are not timed at all, so they never distort your typical.</p>
+</section>
+
 <section data-view="moderation" class="detail" hidden>
   <button class="back" data-go="home">← All recipes</button>
   <h3>Flagging for moderation</h3>
@@ -257,6 +274,15 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.14.0 — 2026-09-09</div>
+    <ul>
+      <li>Marking timer above the paper: it times each paper, records the lap when you mark it done, and fills a gauge toward your typical time for that part. Past the typical it stays muted rather than going red.</li>
+      <li>Pace estimates once three papers in a part are timed: time left on the part and the job, "about 3h 20m of marking left at your pace" on the dashboard, the cost of today's target, and a time chip per job. Typical times use the median.</li>
+      <li>Focus block of 15, 25, 45 or 60 minutes, ending in green with a break; the tab title changes so you notice from another tab.</li>
+      <li>Stepping away costs nothing: after ten idle minutes the timer rolls back to your last activity instead of counting the gap.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.13.0 — 2026-09-07</div>
     <ul>

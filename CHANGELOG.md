@@ -3,6 +3,32 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.14.0 — 2026-09-09
+
+- Marking timer above the paper you are on. It times the paper (or the part),
+  and when you mark it done that becomes a lap, recorded on the paper itself so
+  your typical times build up across sessions and devices.
+- A gauge fills toward your typical time for that part, with a tick where the
+  typical sits. Past the tick it keeps filling in a muted tone rather than
+  turning red: the papers that run long are usually the ones that deserve the
+  thought, so the mark is a reference, not a verdict.
+- Pace estimates, once three papers in a part have been timed: time left on the
+  current part and on the whole job in the strip; "about 3h 20m of marking left
+  at your pace" under Overall progress; the cost of today's target beside
+  Today's quota; and a "~1h 10m" chip on each job card. Below three timed
+  papers it says "learning your pace" and estimates nothing.
+- Typical times use the median, so one paper interrupted by a phone call does
+  not skew every estimate that follows.
+- Focus block (15, 25, 45 or 60 minutes) with a countdown. It ends in green
+  with "take a break", and the browser tab title changes so you see it from
+  another tab.
+- Walking away costs nothing: after ten minutes with no keyboard or pointer
+  activity the timer ends the interval at your last activity rather than
+  counting the gap, so an interrupted paper is not billed for the interruption.
+  There is a pause button as well.
+- Papers ticked with "Mark all remaining", or from the roster box, record no
+  time, since they were never timed; they are left out of the typical.
+
 ## 1.13.0 — 2026-09-07
 
 - Overall progress now counts only jobs that have been sat. A batch of exams

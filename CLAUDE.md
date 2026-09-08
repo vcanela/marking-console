@@ -109,6 +109,7 @@ S = {
             tags: [tagId, ...],  // trip hazards observed on this part (ids into the assessment's hazard set)
             note,            // free text
             markedAt,        // ISO or null; drives "marked today"
+            ms,              // active marking time for this cell, stamped by markDone (behaviour 17); 0 = never timed
             updatedAt        // ISO; drives sync merge (newer wins per cell)
           }
         }
@@ -119,7 +120,7 @@ S = {
   hazardBank: [{ id, name, year, hazards: [{ id, name }], updatedAt }],  // reusable hazard lists prepared ahead of marking; seeded into a job's set by copy, no student data
   daysOff: { ['YYYY-MM-DD']: { off, updatedAt } },  // rest days crossed out on the runway; synced (per-date newest wins); off 0|1 (behaviour 14)
   tombstones: { [id]: deletedAtISO },// deleted class/assessment/bank-entry ids, so a merge cannot resurrect them
-  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort, archivedOpen },  // device-local; NOT synced
+  ui: { currentClass, currentAssessment, currentStudent, currentPart, view, theme, jobSort, archivedOpen, focusMin, focusEnd },  // device-local; NOT synced
   settings: {}   // currently unused
 }
 ```
@@ -358,6 +359,55 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
     `list` (drives the metrics) and `archived`. The flag rides the assessment
     base in `mergeDocs` (newer `updatedAt` wins), so archiving syncs with no
     extra merge code; `normalize` backfills `archived: false`.
+17. **Marking timer and pace** (the `T` object plus `tick`, `paintTimer`,
+    `timerBarHtml`; a strip at the top of the paper view). Two clocks: a **cell
+    clock** timing the student-part on screen, and a **session clock** driving
+    the focus block. Both bank **active intervals only**: `tStop(endAt)` folds
+    the running interval into `T.cellMs`/`T.sessionMs`, `tRun()` resumes.
+    - **Idle rollback is the thing that keeps the data honest**: when the tick
+      sees no activity for `IDLE_MS` (10 min) it calls `tStop(T.lastAct)`, so a
+      walk-away is ended at the last real input and the gap costs nothing rather
+      than being billed to whichever paper was open. Activity = keydown,
+      pointerdown, wheel and throttled pointermove (movement counts, so silence
+      really means away and not reading a long piece of working).
+    - **One navigation hook**: `tSyncCell()` runs at the top of `renderPaper`
+      and compares an `assessment|student|part` key; any change (roster click,
+      Next unmarked, part tab, step) banks the old lap and starts a fresh clock.
+      Do not hook the individual navigation functions. An absent student or the
+      dashboard clears the key, so nothing is timed there.
+    - **`markDone` writes the lap** onto `cell.ms`; `unmarkCell` and a roster
+      un-tick clear it and restart the clock. `markAllRemaining` and
+      `toggleDoneFor` deliberately record **no** time (never timed), so they
+      cannot distort the typical.
+    - **The tick must never call `render()`**: `renderPaper` rebuilds the notes
+      textarea through `innerHTML`, so a per-second re-render would destroy it
+      and steal the caret mid-sentence. `paintTimer()` only writes `textContent`
+      and bar widths onto existing nodes. Elapsed time is derived from
+      `Date.now() - since`, never accumulated by the tick, so a throttled hidden
+      tab keeps exact data and only the display lags; `visibilitychange`
+      repaints on return.
+    - **Pace is a median, not a mean** (`median`, `typicalMs`, `jobTypicalMs`):
+      one interrupted paper would otherwise skew every estimate after it.
+      `MIN_SAMPLE` = 3 timed cells before anything is estimated ("learning your
+      pace" until then); a part with too few of its own falls back to the job
+      median. `pacePartMs`/`paceJobMs` multiply the typical by remaining cells;
+      `paceTotals()` sums across active jobs for the dashboard line and the cost
+      of today's target. Estimates render in `--info` (`.dash-pace`, `.cc-time`,
+      `.mt-est`) as derived information.
+    - **Colour is deliberately not alarming**: the gauge fills `--accent` to the
+      typical tick (at 62.5%, the bar running to 1.6× typical so an overrun
+      stays visible) and continues in `--faint` beyond it. `--danger` is
+      **never** used here: the papers that run long are usually the ones that
+      deserve the thought, and this tool's premise is preventing fatigue-induced
+      degradation, so the tick is a reference and not a threshold. The focus
+      block ends in `--success` with a break, since stopping on time is its
+      point.
+    - **Focus block**: `ui.focusMin`/`ui.focusEnd` (device-local, an absolute
+      end time so a reload resumes the block), `startFocus`/`stopFocus`/
+      `checkFocus`. On expiry it toasts and sets the tab title to "Break time",
+      visible from another tab. No audio.
+    - Times stay out of both clipboard exports on purpose: time per paper reads
+      too easily as a judgement on the student rather than on the marking.
 
 ## Design language
 
@@ -427,7 +477,15 @@ modal; the quota reads in load points = papers × weight, badges show it,
 completion % stays a paper count), the marking runway (dated jobs shade a
 forward strip by effort, per-day parts sum to the day total, hover/tap caption,
 crossing out a rest day greys it with an X and lifts the other days, rest days
-sync, hides with no dated jobs), the keyboard shortcuts (Enter marks and advances, [ ] step
+sync, hides with no dated jobs), the marking timer (the clock runs on arrival at a
+paper and resets on every navigation path; Mark done banks the lap onto the cell and
+it survives a reload and a sync merge; the gauge tick sits exactly at the typical and
+overruns fill the muted segment without ever going red; estimates stay hidden below
+three timed papers and use the median so an outlier does not skew them; idle rollback
+banks only the active time and charges nothing for a walk-away; Mark all and roster
+un-ticks record no time; a focus block counts down, ends green and changes the tab
+title, and survives a reload; **typing in the notes box keeps focus and caret while
+the clock ticks**), the keyboard shortcuts (Enter marks and advances, [ ] step
 students, ? opens the sheet, Esc blurs the notes box then keys work again, keys
 paused while typing), archiving (marking the last paper prompts to archive and
 names outstanding follow-ups/flags; Not yet keeps it active with an Archive
