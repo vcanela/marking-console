@@ -886,7 +886,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.14.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.15.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1072,11 +1072,21 @@ function localDay(d) {
 }
 function todayStr() { return localDay(); }
 function nowISO() { return new Date().toISOString(); }   // UTC timestamp, for sync ordering; day-of derived via localDay()
+// Whole calendar days from today to the due date: 0 = due today (or overdue),
+// 1 = due tomorrow. A due date means due at the START of that day, because the
+// class is often seen first period, so the last day you can mark is the day
+// before. workDaysLeft then spans [today, dueDate), which is exactly that
+// window. If a job really does give you the whole due date, enter the day after.
+// Noon anchors, so a daylight-saving shift cannot move the count.
 function dueDaysLeft(a) {
   if (!a || !a.dueDate) return null;
-  const end = new Date(a.dueDate + 'T23:59:59');
-  return Math.max(0, Math.ceil((end - new Date()) / 86400000));
+  const today = new Date(todayStr() + 'T12:00:00');
+  const due = new Date(a.dueDate + 'T12:00:00');
+  return Math.max(0, Math.round((due - today) / 86400000));
 }
+// True once the due date has passed. dl clamps at 0, so without this an overdue
+// job would be labelled "due today", the most misleading of the three states.
+function isOverdue(a) { return !!(a && a.dueDate) && a.dueDate < todayStr(); }
 // Days crossed out on the runway (rest days), keyed by local date; synced.
 function isDayOff(ds) { return !!(S.daysOff && S.daysOff[ds] && S.daysOff[ds].off); }
 function toggleDayOff(ds) {
@@ -1124,19 +1134,21 @@ function assessmentStats(a) {
   });
   const remaining = denom - marked;
   const pct = denom ? Math.round(100 * marked / denom) : 0;
-  const dl = dueDaysLeft(a);          // calendar days to deadline (drives chips / urgency)
+  const dl = dueDaysLeft(a);          // whole days to the due date; 0 = due today (drives chips / urgency)
   const wdl = workDaysLeft(a);        // working days (calendar minus rest days) drive pacing
+  const overdue = isOverdue(a);
   const weight = jobWeight(a);        // 1 mechanical / 2 average / 3 tricky
   // Paper target per day over working days; today's marked cells count toward it
-  // so it stays stable. When every remaining day is a rest day but the deadline
-  // has not passed, the whole remainder falls due (danger).
+  // so it stays stable. With no working days left at all (due today, overdue, or
+  // every remaining day crossed out as a rest day) the whole remainder falls due
+  // now rather than vanishing from the quota.
   const dailyTarget = (wdl && wdl > 0) ? Math.ceil((remaining + markedToday) / wdl)
-    : (dl && dl > 0 && remaining > 0 ? (remaining + markedToday) : null);
+    : (dl !== null && remaining > 0 ? (remaining + markedToday) : null);
   const loadTarget = dailyTarget !== null ? dailyTarget * weight : null;   // effort points for today
   const complete = denom > 0 && remaining === 0;
   const upcoming = !!a.dateSat && a.dateSat > today && !complete;
   const submitted = students.length - followup - notsitting;
-  return { a, cls, parts: P, students: students.length, submitted, marked, followup, notsitting, markedToday, denom, remaining, pct, dl, wdl, weight, dailyTarget, loadTarget, complete, upcoming };
+  return { a, cls, parts: P, students: students.length, submitted, marked, followup, notsitting, markedToday, denom, remaining, pct, dl, wdl, overdue, weight, dailyTarget, loadTarget, complete, upcoming };
 }
 
 // Progress of a single part: cells done over students expected to sit it.
@@ -1609,9 +1621,9 @@ let runwayDays = [];   // per-day detail for the click/tap caption, kept in step
 let runwayPicked = -1;   // which day's caption is open, so a second tap closes it
 const RUNWAY_HINT = 'Tap a day to see its work, or cross it out as a rest day.';
 function runwayHtml(list) {
-  const jobs = list.filter(x => !x.complete && !x.upcoming && x.a.dueDate && x.dl > 0 && (x.remaining + x.markedToday) > 0);
+  const jobs = list.filter(x => !x.complete && !x.upcoming && x.a.dueDate && x.dl !== null && (x.remaining + x.markedToday) > 0);
   if (!jobs.length) { runwayDays = []; return ''; }
-  const maxIdx = Math.max(...jobs.map(x => x.dl - 1));
+  const maxIdx = Math.max(...jobs.map(x => x.dl));
   const H = Math.min(35, Math.max(14, maxIdx + 1));       // clamp: at least a fortnight, at most five weeks
   const capped = (maxIdx + 1) > H;
   const base = new Date(); base.setHours(12, 0, 0, 0);
@@ -1626,10 +1638,12 @@ function runwayHtml(list) {
     // shade is effort (papers x weight), so a tricky job burns hotter.
     const idxs = [];
     for (let i = 0; i < x.dl && i < H; i++) { if (!days[i].off) idxs.push(i); }
-    if (x.dl - 1 < H) days[x.dl - 1].due = true;
-    if (!idxs.length) return;                              // no working days in view; the quota flags it
-    const rate = (x.remaining + x.markedToday) / idxs.length;
-    idxs.forEach(i => {
+    if (x.dl < H) days[x.dl].due = true;                   // the dot sits on the due date itself
+    // Nothing left to spread over (due today, overdue, or every day in the
+    // window crossed out): it all lands on today, matching Today's quota.
+    const spread = idxs.length ? idxs : [0];
+    const rate = (x.remaining + x.markedToday) / spread.length;
+    spread.forEach(i => {
       days[i].papers += rate;
       days[i].load += rate * x.weight;
       days[i].jobs.push({ name: (x.cls ? x.cls.name + ' ' : '') + x.a.name, weight: x.weight, cells: rate });
@@ -1715,7 +1729,8 @@ function jobCard(x) {
     : `<span class="job-chip muted">no due date</span>`);
   if (x.dl !== null && !x.complete) {
     const urg = x.dl === 0 ? ' danger' : (x.dl <= 2 ? ' soon' : '');
-    chips.push(`<span class="job-chip left${urg}">${x.dl === 0 ? 'due today' : x.dl + ' day' + (x.dl === 1 ? '' : 's') + ' left'}</span>`);
+    const txt = x.overdue ? 'overdue' : x.dl === 0 ? 'due today' : x.dl + ' day' + (x.dl === 1 ? '' : 's') + ' left';
+    chips.push(`<span class="job-chip left${urg}">${txt}</span>`);
   }
   if (x.upcoming) chips.push(`<span class="job-chip up">upcoming</span>`);
   const wl = x.weight === 1 ? 'mechanical' : x.weight === 3 ? 'tricky' : 'average';

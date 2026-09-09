@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.14.0</span>
+    <span class="ver" id="ver">Guide · v1.15.0</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -119,6 +119,8 @@
   <span class="lab">In the app</span>
   <p>Give each job its own due date when you create it. On the dashboard, <b class="k">Today's quota</b> splits the day across your jobs and orders them by urgency: the Sunday job gets the larger share and sits at the top of the list, with its own small bar of done-versus-target for today.</p>
   <p>Work down that list from the top and you stay on track for every deadline without doing the arithmetic yourself. A job with no due date has nothing to pace against, so it will not appear in the quota split; add a due date to any job you want the day planned around.</p>
+  <span class="lab">What a due date means</span>
+  <p>Due at the <b>start</b> of that day, since you often see the class first period. So the last day you can mark is the day before, and a job due Friday is paced over Wednesday and Thursday. "1 day left" means due tomorrow, and everything left falls due today. If a job really does give you the whole due date, enter the following day instead.</p>
   <span class="lab">Difficulty</span>
   <p>Not every paper is equal effort. When you create or edit a job, set its <b class="k">Difficulty</b>: <b>1</b> mechanical, <b>2</b> average, <b>3</b> tricky. The quota then counts <b class="k">load points</b> (papers × difficulty), so five tricky investigations weigh more than five quick chunks and rise up the list. It only changes pacing; the completion percentage stays a plain count of papers.</p>
   <span class="lab">The runway, and rest days</span>
@@ -274,6 +276,14 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.15.0 — 2026-09-09</div>
+    <ul>
+      <li>"1 day left" now means due tomorrow; it used to mean due today.</li>
+      <li>A due date means due at the start of that day, so the last day you can mark is the day before. Targets are a little tighter: a job due Friday paces over Wednesday and Thursday. If a job gives you the whole due date, enter the following day instead.</li>
+      <li>A job due today puts its whole remainder on today instead of dropping out of Today's quota, and overdue jobs now say "overdue" rather than "due today".</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.14.0 — 2026-09-09</div>
     <ul>

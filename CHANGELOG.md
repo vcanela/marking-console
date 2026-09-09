@@ -3,6 +3,25 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.15.0 — 2026-09-09
+
+- Days left now counts whole days to the deadline, so "1 day left" means due
+  tomorrow. It used to mean due today, because the count ran to the end of the
+  due date and rounded up.
+- A due date now means due at the **start** of that day, so the last day you can
+  mark is the day before. You often see the class first period, and the old
+  maths handed you the due date itself as marking time, which paced everything a
+  day too slowly. Targets are correspondingly tighter: a job due Friday now
+  spreads over Wednesday and Thursday, not Wednesday to Friday. If a job really
+  does give you the whole due date, enter the following day as the due date.
+- A job due today, or one whose remaining days are all crossed out as rest days,
+  puts its whole remainder on today rather than dropping out of Today's quota.
+- Overdue jobs say "overdue" instead of "due today", which is what they used to
+  show once the date had passed.
+- On the runway, the deadline dot now sits on the due date itself rather than a
+  day early, and an overdue or due-today job loads onto today, so the first
+  square still agrees with Today's quota.
+
 ## 1.14.0 — 2026-09-09
 
 - Marking timer above the paper you are on. It times the paper (or the part),

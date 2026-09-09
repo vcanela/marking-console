@@ -136,6 +136,10 @@ date), never `iso.slice(0,10)` (UTC). `dateSat`/`dueDate`/`satOn` come from
 `<input type="date">` and are local; comparing them to a UTC "today" reads a day
 behind for much of the NZ day (UTC+12/13), which once mislabelled a job sat
 today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
+Day *counts* must be whole-day differences between local date strings on noon
+anchors (see `dueDaysLeft`), never a millisecond division against `new Date()`:
+measuring to `dueDate + 'T23:59:59'` and rounding up once made "1 day left" mean
+due today and handed the deadline day itself out as marking time.
 
 ## Key behaviours (do not break these)
 
@@ -177,12 +181,22 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
    who later sits is marked present and given a `satOn` late date.
 4. **Daily target** (per assessment): `ceil((remaining + markedToday) /
    workDaysLeft)`, computed in `assessmentStats` in **cells** (student × part).
-   `dl` = `dueDaysLeft` (calendar days, drives chips/urgency); `wdl` =
-   `workDaysLeft` = calendar days-left minus **rest days** (`isDayOff`), and
-   drives the paper target, so crossing out days concentrates the load onto the
-   days you keep (if every remaining day is off but the deadline has not passed,
-   the whole remainder falls due, danger). Cells marked today count toward today,
-   so the target stays stable through the day. **Load points** = paper target ×
+   **A due date means due at the START of that day** (the class is often seen
+   first period), so the last day you can mark is the day before: `dl` =
+   `dueDaysLeft` = whole calendar days from today to `dueDate`, where **0 = due
+   today (or overdue) and 1 = due tomorrow**, and `workDaysLeft` spans
+   `[today, dueDate)`, which is exactly that window. Do not "fix" this back to
+   counting the due date as markable; entering the following day is the escape
+   hatch for a job that really does give you the whole day. `dl` drives
+   chips/urgency; `wdl` = `dl` minus **rest days** (`isDayOff`) drives the paper
+   target, so crossing out days concentrates the load onto the days you keep.
+   With **no working days at all** (`wdl === 0`: due today, overdue, or every
+   remaining day crossed out) the whole remainder falls due now rather than
+   dropping out of the quota, which is why the fallback tests `dl !== null` and
+   not `dl > 0`. `isOverdue(a)` (a plain `dueDate < todayStr()` comparison)
+   separates "overdue" from "due today" in the chip, since `dl` clamps at 0.
+   Cells marked today count toward today, so the target stays stable through the
+   day. **Load points** = paper target ×
    the job's `weight` (1/2/3); `dailyQuota` sums load points across active dated
    jobs so a tricky job counts more, and the runway shades by effort the same
    way. Weight only scales pacing: **percentage and progress stay a plain paper
@@ -311,13 +325,18 @@ today as "upcoming". Derive "marked today" the same way (`localDay(markedAt)`).
     element, colour it by state from the semantic palette, do not invent a hue.
 14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
     a **forward** heat strip. For each active dated job it spreads
-    `remaining + markedToday` evenly across its **working days** (today to the
-    deadline, skipping `daysOff`) and sums the **effort** (papers × `weight`) per
-    day, so a tricky job burns hotter; the first square agrees with Today's quota.
-    Horizon runs today to the last due date, clamped to [14, 35] days. Shade is
+    `remaining + markedToday` evenly across its **working days** (indices
+    `[0, dl)`, i.e. today through the day *before* the due date, skipping
+    `daysOff`) and sums the **effort** (papers × `weight`) per day, so a tricky
+    job burns hotter. A job with **no working days left** (due today, overdue, or
+    all its days crossed out) puts its whole remainder on index 0, so **the first
+    square keeps agreeing with Today's quota** — the invariant to preserve if you
+    touch this. Horizon runs today to the last due date, clamped to [14, 35]
+    days. Shade is
     `ceil(load/max * 4)` (relative to the busiest day) over a `color-mix` ramp of
     `--accent` (a single-hue sequential scale, kept clear of `--danger`); today is
-    ringed, each due date carries a `--info` dot above the square, weekends render
+    ringed, the `--info` dot sits on `days[dl]`, the due date **itself** (which
+    carries no load, since marking ends the day before), weekends render
     as smaller centred squares (an inner `.rw-sq` holds the shade), and **rest
     days** show a crossed-out `.rw-off` square with no load. Hover shows a `title`;
     click/tap toggles a caption open and shut (`runwayPick`/`runwayPicked`,
@@ -472,7 +491,12 @@ set, at job creation, on edit, and while marking; confirm it is an additive
 copy that stays independent of the source and dedupes on re-import), deleting a
 hazard while marking (it clears from every paper and does not resurrect on
 sync), flagging a
-student for moderation with a comment, job difficulty weight (1/2/3 in the job
+student for moderation with a comment, the due-date arithmetic (a job due
+tomorrow reads "1 day left" and puts its whole remainder on today; one due today
+reads "due today" with everything due now and still appears in the quota; one
+already past reads "overdue", not "due today"; a job due in 3 days paces over
+today plus the next two, not three; the runway's deadline dot sits on the due
+date and the first square equals Today's quota), job difficulty weight (1/2/3 in the job
 modal; the quota reads in load points = papers × weight, badges show it,
 completion % stays a paper count), the marking runway (dated jobs shade a
 forward strip by effort, per-day parts sum to the day total, hover/tap caption,
