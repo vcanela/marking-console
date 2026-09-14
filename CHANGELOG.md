@@ -3,6 +3,35 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.16.0 — 2026-09-09
+
+- Time estimates now cover every job, not only the ones you have already timed.
+  A job you have not started is priced from its difficulty: 1.5 minutes per part
+  per student at difficulty 1, 3 at difficulty 2, 4.5 at difficulty 3, and a
+  paper marked as a whole counts as one bigger cell at 3, 6 or 9 minutes. Before
+  this, an untimed job contributed nothing, so the headline looked like a total
+  while describing a fraction of the work: 26 papers waiting could read "about
+  10m of marking left".
+- "About X of marking ahead" now includes work that has not been sat yet, with
+  the not-yet-sat share named separately, since a batch of exams next week is
+  real marking coming at you even though you cannot start it.
+- Estimates move to your own times gradually rather than switching over at a
+  threshold. Each level is trusted in proportion to how many papers back it: a
+  new job starts at the difficulty estimate, is about half yours after three
+  papers, and is entirely yours after ten. A second part inherits the job's
+  measured pace instead of falling back to the default. The figures creep like a
+  journey time rather than lurching by hours when a threshold is crossed.
+- One unusually long paper still barely moves anything: typical times are
+  medians, so a 20 minute paper among 2 minute ones shifts the estimate by
+  seconds, where an average would more than double it.
+- Hover any time estimate to see how much of it comes from your own timings and
+  how much is still assumed.
+- The timer strip keeps its gauge and its "typical" reading measured-only; they
+  still say "learning your pace" until three papers are timed. Assumed numbers
+  are for planning totals, not for pacing you against a figure you never set.
+- Fixed Today's quota headline counting jobs that have not been sat yet, so it
+  disagreed with the sum of the per-job bars beneath it.
+
 ## 1.15.0 — 2026-09-09
 
 - Days left now counts whole days to the deadline, so "1 day left" means due

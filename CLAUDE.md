@@ -321,6 +321,8 @@ due today and handed the deadline day itself out as marking time.
     urgency (`u-danger` due today, default `--accent` within two days, `u-later`
     blue further out, `.met` green); job cards get a left stripe by state
     (`s-danger`/`s-soon`/`s-info`/`s-success`/`s-idle`) in the same language.
+    `dailyQuota()` excludes `upcoming` jobs exactly as the per-job bars do, so
+    the headline always equals the sum of its own breakdown.
     Hues are soft `color-mix` washes over `--panel`; if you add a dashboard
     element, colour it by state from the semantic palette, do not invent a hue.
 14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
@@ -405,14 +407,40 @@ due today and handed the deadline day itself out as marking time.
       `Date.now() - since`, never accumulated by the tick, so a throttled hidden
       tab keeps exact data and only the display lags; `visibilitychange`
       repaints on return.
-    - **Pace is a median, not a mean** (`median`, `typicalMs`, `jobTypicalMs`):
-      one interrupted paper would otherwise skew every estimate after it.
-      `MIN_SAMPLE` = 3 timed cells before anything is estimated ("learning your
-      pace" until then); a part with too few of its own falls back to the job
-      median. `pacePartMs`/`paceJobMs` multiply the typical by remaining cells;
-      `paceTotals()` sums across active jobs for the dashboard line and the cost
-      of today's target. Estimates render in `--info` (`.dash-pace`, `.cc-time`,
-      `.mt-est`) as derived information.
+    - **Pace is a median, not a mean** (`median`, `typicalMs`): one paper that
+      ran long would otherwise skew every estimate after it. Do not add outlier
+      clipping on top; the median already resists them, and discarding slow
+      papers would bias every estimate optimistic.
+    - **Every job is priced, including untimed and not-yet-sat ones**
+      (`cellPriceMs`). An untimed job falls back to `defaultCellMs(a)` =
+      `DEFAULT_PART_MS` (1.5 min) × weight per part, or `DEFAULT_WHOLE_MS`
+      (3 min) × weight for a single-part paper, the owner's own figures. A job
+      marked in parts is therefore priced higher in total than the same job
+      marked whole, deliberately: each paper is handled once per part.
+      Previously an untimed job contributed nothing, so the headline read as a
+      total while describing a fraction of the work (26 papers waiting once read
+      "about 10m left").
+    - **The default gives way to measurement by a glide, never a threshold**:
+      `price = w_part·median(part) + (1 − w_part)·[w_job·median(job) +
+      (1 − w_job)·default]`, with `w = min(1, samples / TRUST_N)` and
+      `TRUST_N` = 10. Switching outright at `MIN_SAMPLE` would lurch the
+      headline by hours the moment a third paper was timed, and again on every
+      part; the glide makes it creep like a journey time. A second part inherits
+      the job median (`w_job` = 1) rather than reverting to the default.
+      `cellTrust` returns the weight resting on measurement, which
+      `paceSourceTitle` turns into the "X% from your own times" tooltip.
+    - `pacePartMs`/`paceJobMs` multiply the price by remaining cells;
+      `paceTotals()` returns `left` (everything unmarked, **including
+      `upcoming`** jobs, since a batch sat next week is real work coming),
+      `upcoming` (that share, named separately in the dashboard line), `today`
+      (the cost of today's targets, excluding upcoming since none of it is
+      markable today) and `measuredPct`. Estimates render in `--info`
+      (`.dash-pace`, `.cc-time`, `.mt-est`) as derived information.
+    - **`MIN_SAMPLE` = 3 still governs the strip's gauge and its "typical"
+      readout only** ("learning your pace" until then). Those two claim to know
+      *your* pace, so they stay measured-only; a gauge filling against an assumed
+      figure is the one place a guess could push the owner's marking around.
+      Keep defaults out of them.
     - **Colour is deliberately not alarming**: the gauge fills `--accent` to the
       typical tick (at 62.5%, the bar running to 1.6× typical so an overrun
       stays visible) and continues in `--faint` beyond it. `--danger` is
@@ -505,7 +533,11 @@ sync, hides with no dated jobs), the marking timer (the clock runs on arrival at
 paper and resets on every navigation path; Mark done banks the lap onto the cell and
 it survives a reload and a sync merge; the gauge tick sits exactly at the typical and
 overruns fill the muted segment without ever going red; estimates stay hidden below
-three timed papers and use the median so an outlier does not skew them; idle rollback
+three timed papers and use the median so an outlier does not skew them; an untimed
+job is still priced from its difficulty and a not-yet-sat job still counts in the
+"marking ahead" total; the estimate glides toward your own times as papers are
+timed instead of jumping at the third; the quota headline equals the sum of its
+bars; idle rollback
 banks only the active time and charges nothing for a walk-away; Mark all and roster
 un-ticks record no time; a focus block counts down, ends green and changes the tab
 title, and survives a reload; **typing in the notes box keeps focus and caret while
