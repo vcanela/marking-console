@@ -116,7 +116,7 @@ S = {
       }
     }
   }],
-  hazardSets: { [setId]: [{ id, name, deleted, updatedAt }] },  // per-assessment trip-hazard sets; assessments may share a set; deleted is a soft-delete tombstone (see behaviour 6)
+  hazardSets: { [setId]: [{ id, name, part, deleted, updatedAt }] },  // per-assessment trip-hazard sets; assessments may share a set; deleted is a soft-delete tombstone; part scopes a hazard to one part, absent/'' = the whole paper (see behaviour 6)
   hazardBank: [{ id, name, year, hazards: [{ id, name }], updatedAt }],  // reusable hazard lists prepared ahead of marking; seeded into a job's set by copy, no student data
   daysOff: { ['YYYY-MM-DD']: { off, updatedAt } },  // rest days crossed out on the runway; synced (per-date newest wins); off 0|1 (behaviour 14)
   tombstones: { [id]: deletedAtISO },// deleted class/assessment/bank-entry ids, so a merge cannot resurrect them
@@ -224,6 +224,30 @@ due today and handed the deadline day itself out as marking time.
    one auto-attaches it. Sidebar sorts by frequency within the current part.
    `tagName(a, tid)` resolves within the assessment's set. Migration: the old
    global `tags` becomes one shared `legacy` set kept by existing assessments.
+   **Scoped to a part** (`t.part`): on a multi-part job a hazard can belong to
+   one part, so each question keeps a short list of its own; a list long enough
+   to cover a whole paper is one the owner stops reading, leaving its rarer
+   entries unused. `part` absent or `''` means **the whole paper** (every part),
+   which is what every pre-1.17 hazard is, and what single-part jobs and
+   new-job-draft imports always produce, so nothing already set up changes.
+   **Two accessors, do not conflate them**: `allHazards(a)` is the whole live
+   set and must be used to resolve a name or to export, since a hazard logged on
+   Section A still has to resolve while Section B is on screen (this is why
+   `tagName` uses it); `hazardsOf(a, pid)` is what is in play on one part
+   (scoped to it, plus the whole-paper ones) and drives the sidebar and every
+   dedupe. Called with no `pid` it means "all". The same mistake may exist as
+   two entries under two parts, deliberately, so **deduping is always against
+   what is in play at the destination, never the whole set** (`addTag` and
+   `doImport` both do this): a list imported into Q1 can then be imported into
+   Q2, while a whole-paper hazard is never duplicated into a part. `renderTags`
+   names the part in the column head (`#tagScope`) so a short list reads as
+   scoped rather than as hazards gone missing. `reconcileParts` calls
+   `promoteOrphanHazards`, so removing a part returns its hazards to the whole
+   paper instead of stranding them against a dead part id, where `hazardsOf`
+   would filter them out of every list and they would look deleted. The `part`
+   field rides `mergeSet`'s whole-entry newer-wins and `normalize` mutates
+   hazard entries in place rather than rebuilding them, so it syncs and persists
+   with no extra plumbing.
    A hazard can be **deleted while marking** (`deleteHazard`, a delete control
    on each sidebar row): this is a **soft delete** (`t.deleted = true` with a
    fresh `updatedAt`), not a splice, so a sync merge (which unions tags by id)
@@ -238,13 +262,25 @@ due today and handed the deadline day itself out as marking time.
    **Import** (`openImport`/`renderImport`/`doImport`, the `#importOverlay`
    modal): brings hazards into a job by **copy**, from two clearly separated
    sources: **the bank** and a **live set** (another job's current non-deleted
-   hazards). Importing is additive: it adds only names not already present
-   (case-insensitive, ignoring deleted) and never repoints or removes. It is
+   hazards). Importing is additive: it adds only names not already in play at
+   the destination (case-insensitive, ignoring deleted) and never repoints or
+   removes. It is
    reachable from three places, all sharing the modal: creating a job (staged
    into `jobHazardDraft`, an array of names built into the new set in `saveJob`),
    editing a job (straight into the job's real set), and while marking (the
    `#tagImportBtn` control in the Trip hazards column). `importTarget` routes to
-   the draft or an assessment. This replaced the old linked "share a set"
+   the draft or an assessment. On a multi-part target the modal shows an
+   **Add to** selector (`#importScopeRow`, `renderImportScope`,
+   `importScopeTarget`): "All parts" or a named part, defaulting to `curPart()`
+   when the target is the job on screen, so importing mid-marking needs no
+   choice. A **draft** (new job) always imports whole-paper, because its parts
+   have no ids until `saveJob` runs; per-question prep happens from the pencil or
+   on reaching each part. A multi-part **live set** is listed **one entry per
+   part** plus its whole-paper hazards ("Mechanics test · Q1"): flattening every
+   question into one pile would defeat the workflow the live set exists for,
+   which is refining class 1's Q1 list and carrying it into class 2's Q1.
+   There is deliberately no UI for re-scoping an existing hazard; delete and
+   re-import covers it. This replaced the old linked "share a set"
    option; two jobs pointing at one `hazardSet` id still work, but new setups
    are copies, so the workflow is: mark class 1, refine, then import class 1's
    live set into class 2 to carry the refinements across (each class keeps its
@@ -258,7 +294,10 @@ due today and handed the deadline day itself out as marking time.
    student, not per-part. The owner pastes this into Claude.
 8. **Two assessment exports, both in the workspace** (`class-summary-row`):
    **hazard summary** (`copyAssessmentSummary`) is the trip-hazard frequency
-   table for reteaching; **assessment data** (`copyAssessmentData`) is a full
+   table for reteaching, each row naming its part on a multi-part job (a scoped
+   hazard can only ever be logged while its own part is on screen, so the counts
+   are already question-partitioned; the label just makes that visible);
+   **assessment data** (`copyAssessmentData`) is a full
    anonymous dump, every paper broken down by part with status/hazards/note
    (papers numbered, no names) plus hazard totals and moderation flags, for
    sharing or AI analysis.
@@ -516,7 +555,16 @@ remaining (ticks the current part's unmarked non-absent cells, skips absences,
 confirms with the count/part, hides at full), the hazard bank
 (add a bank list in Set up), importing hazards (from the bank and from a live
 set, at job creation, on edit, and while marking; confirm it is an additive
-copy that stays independent of the source and dedupes on re-import), deleting a
+copy that stays independent of the source and dedupes on re-import),
+part-scoped hazards (on a multi-part job the sidebar shows only that part's list
+plus the whole-paper ones and names the part in the column head; the import
+"Add to" selector defaults to the part being marked; a whole-paper name is not
+duplicated into a part but a part-scoped one does copy into another part on
+re-import; a hazard typed while marking joins that part only; a multi-part live
+set is offered per part; removing a part promotes its hazards to the whole paper
+instead of hiding them; the summary export names the part per row; a single-part
+job shows no scope label and no selector; pre-existing hazards with no part show
+everywhere), deleting a
 hazard while marking (it clears from every paper and does not resurrect on
 sync), flagging a
 student for moderation with a comment, the due-date arithmetic (a job due

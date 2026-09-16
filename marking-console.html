@@ -131,6 +131,9 @@
     display: flex; justify-content: space-between; align-items: center;
   }
   .col-head-right { display: inline-flex; align-items: center; gap: 10px; }
+  /* Names the part a scoped hazard list belongs to, so a short list reads as
+     scoped rather than as hazards having gone missing. */
+  .col-scope { color: var(--tag); text-transform: none; letter-spacing: 0.04em; }
   .mark-all {
     font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; text-transform: none;
     background: var(--panel-2); border: 1px solid var(--success-dim); color: var(--success);
@@ -419,6 +422,17 @@
   }
   .import-item:hover { border-color: var(--tag); }
   .import-item .imp-year { color: var(--tag); }
+  /* Which part an import lands in. Purple, like everything in the trip-hazard
+     system, so the concept stays findable by colour. */
+  .import-scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .import-scope label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--faint); }
+  .import-scope select {
+    background: var(--panel-2); border: 1px solid var(--tag-dim); color: var(--text);
+    border-radius: 6px; font-family: var(--mono); font-size: 12px; padding: 5px 7px;
+  }
+  .import-scope select:focus { outline: none; border-color: var(--tag); }
+  .import-scope-note { font-size: 11.5px; color: var(--faint); flex: 1 1 200px; }
   .import-item .imp-count { margin-left: auto; color: var(--faint); }
   .haz-import-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .haz-readout { font-family: var(--mono); font-size: 12px; color: var(--muted); }
@@ -719,7 +733,7 @@
 
   <!-- Tags -->
   <section class="col tag-col">
-    <div class="col-head"><span>Trip hazards</span><span id="tagTotal"></span></div>
+    <div class="col-head"><span>Trip hazards<span id="tagScope" class="col-scope"></span></span><span id="tagTotal"></span></div>
     <div id="tagAdd">
       <input id="tagInput" placeholder="New trip hazard, e.g. sig figs dropped" maxlength="80">
       <button id="tagAddBtn" title="Add trip hazard">+</button>
@@ -828,6 +842,11 @@
   <div class="modal">
     <h2>Import trip hazards</h2>
     <p class="sync-help" style="margin-bottom:10px;">Copies the hazards into this job; only ones not already here are added, and nothing you have logged is removed.</p>
+    <div class="import-scope" id="importScopeRow" hidden>
+      <label for="importScope">Add to</label>
+      <select id="importScope"></select>
+      <span class="import-scope-note">A part keeps its own short list; “All parts” is for mistakes that can appear anywhere.</span>
+    </div>
     <h3>From the bank</h3>
     <div id="importBank" class="import-list"></div>
     <h3>From a live set (another job)</h3>
@@ -886,7 +905,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.16.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.17.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1055,13 +1074,26 @@ function curPart() {
 // Trip hazards live in per-assessment sets (S.hazardSets), so an assessment may
 // share a set with another (the same test in a second class). All lookups are
 // scoped to the assessment's set.
-function hazardsOf(a) { return ((a && S.hazardSets[a.hazardSet]) || []).filter(t => !t.deleted); }
+// Every live hazard in the assessment's set, whatever part it belongs to. Use
+// this to resolve a name or to export: a hazard logged on Section A must still
+// resolve while Section B is on screen.
+function allHazards(a) { return ((a && S.hazardSets[a.hazardSet]) || []).filter(t => !t.deleted); }
+// The hazards in play on one part: those scoped to it, plus those with no part,
+// which mean "anywhere in this paper" and are also every hazard created before
+// scoping existed. Keeping each question's list short is the point: a list long
+// enough to cover a whole paper is one you stop reading.
+function hazardsOf(a, pid) {
+  const all = allHazards(a);
+  if (!pid || !isMultiPart(a)) return all;
+  return all.filter(t => !t.part || t.part === pid);
+}
 function ensureHazardSet(a) {
   if (!a.hazardSet) a.hazardSet = uid();
   if (!S.hazardSets[a.hazardSet]) S.hazardSets[a.hazardSet] = [];
   return S.hazardSets[a.hazardSet];
 }
-const tagName = (a, tid) => (hazardsOf(a).find(t => t.id === tid) || {}).name || '?';
+const tagName = (a, tid) => (allHazards(a).find(t => t.id === tid) || {}).name || '?';
+const partNameOf = (a, pid) => ((partsOf(a).find(p => p.id === pid) || {}).name || '');
 
 // Local calendar day (YYYY-MM-DD). Must be LOCAL, not UTC: dateSat/dueDate/satOn
 // come from <input type="date"> (local), so a UTC "today" reads a day behind for
@@ -2243,9 +2275,13 @@ function renderTags() {
   const s = curStudent();
   const pid = curPart();
   const cell = (a && s) ? cellOf(a, s.id, pid) : null;
-  const hazards = hazardsOf(a);
+  const hazards = hazardsOf(a, pid);
+  // Name the part in the column head, so a short list reads as scoped rather
+  // than as hazards having gone missing.
+  const scopeEl = document.getElementById('tagScope');
+  scopeEl.textContent = (a && isMultiPart(a)) ? ` · ${partNameOf(a, pid) || 'part'}` : '';
   if (!hazards.length) {
-    list.innerHTML = '<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency within the part you are marking so common mistakes rise to the top.</div>';
+    list.innerHTML = `<div class="tag-hint">Add trip hazards as you meet them. Click one to log it against the current paper; the list sorts by frequency within the part you are marking so common mistakes rise to the top.${(a && isMultiPart(a)) ? ' This list is just for this part, so each question keeps a short list of its own; import or add hazards for another part when you reach it.' : ''}</div>`;
     document.getElementById('tagTotal').textContent = '';
     return;
   }
@@ -2296,8 +2332,13 @@ function addTag() {
   const a = curAssessment();
   if (!a) { toast('Open a marking job first'); return; }
   const set = ensureHazardSet(a);
-  if (set.some(t => !t.deleted && t.name.toLowerCase() === name.toLowerCase())) { toast('That trip hazard already exists'); return; }
+  const pid = curPart();
+  // Dedupe against what is in play on this part, not the whole set: the same
+  // mistake can legitimately be listed under two questions, but offering it
+  // twice within one question is just noise.
+  if (hazardsOf(a, pid).some(t => t.name.toLowerCase() === name.toLowerCase())) { toast('That trip hazard already exists here'); return; }
   const t = { id: uid(), name, updatedAt: nowISO() };
+  if (isMultiPart(a)) t.part = pid;   // spotted while marking this part, so it belongs to it
   set.push(t);
   const s = curStudent();
   if (s && !absent(markOf(a, s.id))) { const cell = ensureCell(a, s.id, curPart()); cell.tags.push(t.id); cell.updatedAt = nowISO(); }   // adding a hazard mid-paper almost always means you just saw it
@@ -2336,9 +2377,32 @@ function closeImport() {
   document.getElementById('importOverlay').classList.remove('open');
   importTarget = null;
 }
+// Which part the import lands in. '' means the whole paper (every part), which
+// is also what a single-part job and a not-yet-created job always use, since a
+// new job's parts have no ids until it is saved.
+function importScopeTarget() {
+  const row = document.getElementById('importScopeRow');
+  if (!row || row.hidden) return '';
+  return document.getElementById('importScope').value || '';
+}
+function renderImportScope() {
+  const row = document.getElementById('importScopeRow');
+  const sel = document.getElementById('importScope');
+  const a = (importTarget && importTarget.kind === 'assessment')
+    ? S.assessments.find(x => x.id === importTarget.id) : null;
+  if (!a || !isMultiPart(a)) { row.hidden = true; sel.innerHTML = ''; return; }
+  row.hidden = false;
+  // Default to the part being marked when this is the job on screen, so
+  // importing mid-marking needs no choice at all.
+  const dflt = (a.id === S.ui.currentAssessment) ? curPart() : '';
+  sel.innerHTML = [`<option value="">All parts</option>`]
+    .concat(partsOf(a).map(p => `<option value="${esc(p.id)}"${p.id === dflt ? ' selected' : ''}>${esc(p.name || 'Part')}</option>`))
+    .join('');
+}
 function renderImport() {
   const bankEl = document.getElementById('importBank');
   const liveEl = document.getElementById('importLive');
+  renderImportScope();
   const bank = S.hazardBank || [];
   bankEl.innerHTML = bank.length ? '' : '<div class="import-empty">No bank lists yet. Prepare one in Set up.</div>';
   bank.forEach(e => {
@@ -2360,13 +2424,30 @@ function renderImport() {
     return hazardsOf(x).length > 0;
   });
   liveEl.innerHTML = live.length ? '' : '<div class="import-empty">No other job has trip hazards yet.</div>';
+  // A multi-part source is offered one entry per part (plus its whole-paper
+  // hazards), never as one flat pile: bringing class 1's refined Section A list
+  // into class 2's Section A is the whole point of a live set, and flattening
+  // every question into a single part would defeat it.
   live.forEach(x => {
-    const names = hazardsOf(x).map(t => t.name);
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'import-item';
-    b.innerHTML = `<span class="imp-year">${esc((classOf(x) || {}).name || '?')}</span><span>${esc(x.name)}</span><span class="imp-count">${names.length}</span>`;
-    b.onclick = () => doImport(names, x.name);
-    liveEl.appendChild(b);
+    const groups = [];
+    if (isMultiPart(x)) {
+      partsOf(x).forEach(p => {
+        const names = allHazards(x).filter(t => t.part === p.id).map(t => t.name);
+        if (names.length) groups.push({ label: `${x.name} · ${p.name || 'Part'}`, names });
+      });
+      const whole = allHazards(x).filter(t => !t.part).map(t => t.name);
+      if (whole.length) groups.push({ label: `${x.name} · all parts`, names: whole });
+    } else {
+      const names = allHazards(x).map(t => t.name);
+      if (names.length) groups.push({ label: x.name, names });
+    }
+    groups.forEach(g => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'import-item';
+      b.innerHTML = `<span class="imp-year">${esc((classOf(x) || {}).name || '?')}</span><span>${esc(g.label)}</span><span class="imp-count">${g.names.length}</span>`;
+      b.onclick = () => doImport(g.names, g.label);
+      liveEl.appendChild(b);
+    });
   });
 }
 function doImport(names, sourceLabel) {
@@ -2380,13 +2461,25 @@ function doImport(names, sourceLabel) {
     const a = S.assessments.find(x => x.id === importTarget.id);
     if (!a) return;
     const set = ensureHazardSet(a);
-    const have = new Set(set.filter(t => !t.deleted).map(t => t.name.toLowerCase()));
+    const scope = importScopeTarget();
+    // Dedupe against what is already in play at the destination (that part plus
+    // the whole-paper ones), not the whole set: a hazard scoped to Section A
+    // should still copy into Section B, while one that already applies to the
+    // whole paper must not be duplicated into a part.
+    const have = new Set(hazardsOf(a, scope || null).map(t => t.name.toLowerCase()));
     const now = nowISO();
-    names.forEach(n => { if (n && !have.has(n.toLowerCase())) { set.push({ id: uid(), name: n, updatedAt: now }); have.add(n.toLowerCase()); added++; } });
+    names.forEach(n => {
+      if (!n || have.has(n.toLowerCase())) return;
+      const t = { id: uid(), name: n, updatedAt: now };
+      if (scope) t.part = scope;
+      set.push(t); have.add(n.toLowerCase()); added++;
+    });
     if (added) { save(); render(); }
     updateJobHazardReadout();   // keeps the edit-job readout in step when open
   }
-  toast(added ? `Added ${added} trip hazard${added === 1 ? '' : 's'} from ${sourceLabel}` : 'All already present');
+  const where = (importTarget.kind === 'assessment' && importScopeTarget())
+    ? ` to ${partNameOf(S.assessments.find(x => x.id === importTarget.id), importScopeTarget()) || 'this part'}` : '';
+  toast(added ? `Added ${added} trip hazard${added === 1 ? '' : 's'}${where} from ${sourceLabel}` : 'All already present');
 }
 
 function markDone() {
@@ -2529,9 +2622,17 @@ function copyAssessmentSummary() {
   const st = assessmentStats(a);
   const freq = {};
   c.students.forEach(s => partsOf(a).forEach(p => cellOf(a, s.id, p.id).tags.forEach(tid => { freq[tid] = (freq[tid] || 0) + 1; })));
+  // On a multi-part job each hazard belongs to one question (it can only be
+  // logged while that part is on screen), so name the question on the row: a
+  // reteaching list reads far better broken down by question than pooled.
+  const scopeOf = tid => {
+    const t = allHazards(a).find(x => x.id === tid);
+    if (!isMultiPart(a) || !t) return '';
+    return t.part ? ` (${partNameOf(a, t.part) || 'part'})` : ' (all parts)';
+  };
   const rows = Object.entries(freq)
     .sort((x, y) => y[1] - x[1])
-    .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(a, tid)}`);
+    .map(([tid, n]) => `${String(n).padStart(3)} × ${tagName(a, tid)}${scopeOf(tid)}`);
   let txt = `${c.name} — ${a.name} — trip-hazard summary (${st.marked}/${st.denom} cells marked, ${st.followup} to follow up, ${st.notsitting} not sitting)\n`;
   txt += rows.length ? rows.join('\n') : '(no trip hazards logged)';
   clip(txt, 'Hazard summary copied');
@@ -2955,6 +3056,7 @@ function reconcileParts(a, names) {
       m.parts = keep ? { [PART_ALL]: keep } : {};
     });
     a.parts = [];
+    promoteOrphanHazards(a, null);   // no parts left: every hazard applies to the whole paper
     return;
   }
   const used = new Set();
@@ -2970,6 +3072,17 @@ function reconcileParts(a, names) {
   const removed = oldParts.filter(p => !keptIds.has(p.id)).map(p => p.id);
   if (removed.length) Object.values(a.marks || {}).forEach(m => { if (m.parts) removed.forEach(id => delete m.parts[id]); });
   a.parts = result;
+  promoteOrphanHazards(a, new Set(result.map(r => r.id)));
+}
+// A hazard scoped to a part that no longer exists would be filtered out of
+// every list and look deleted, so removing a part promotes its hazards back to
+// the whole paper instead of orphaning them. Pass null to promote all of them.
+function promoteOrphanHazards(a, keptIds) {
+  const set = S.hazardSets[a.hazardSet];
+  if (!set) return;
+  set.forEach(t => {
+    if (t.part && (!keptIds || !keptIds.has(t.part))) { t.part = ''; t.updatedAt = nowISO(); }
+  });
 }
 function saveJob() {
   const name = document.getElementById('jobName').value.trim();

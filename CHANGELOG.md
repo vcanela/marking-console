@@ -3,6 +3,31 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.17.0 — 2026-09-16
+
+- Trip hazards can now belong to a single part, so each question keeps its own
+  short list instead of every question sharing one long one. A list long enough
+  to cover a whole paper is one you stop reading, and its rarer entries go
+  unused.
+- Importing into a multi-part job asks which part to add to, defaulting to the
+  part you are marking, with "All parts" for mistakes that can appear anywhere
+  (units missing, no working shown). Hazards you add by hand while marking
+  belong to that part too.
+- The Trip hazards column names the part it is showing, so a short list reads as
+  scoped rather than as hazards having gone missing.
+- The same mistake can be listed under two questions. Importing skips only what
+  is already in play where it lands, so a list imported into Q1 can be imported
+  into Q2 as well, while a hazard that already applies to the whole paper is
+  never duplicated into a part.
+- A live set from a multi-part job is offered per part ("Mechanics test · Q1"),
+  so marking one class, refining its Q1 list and carrying that into the second
+  class still works question by question instead of arriving as one flat pile.
+- The hazard summary export names the question on each row.
+- Existing hazards, and every hazard in a single-part job, apply to the whole
+  paper exactly as before; nothing you have set up changes, and single-part jobs
+  show none of this. Removing a part returns its hazards to the whole paper
+  rather than leaving them stranded.
+
 ## 1.16.0 — 2026-09-09
 
 - Time estimates now cover every job, not only the ones you have already timed.
