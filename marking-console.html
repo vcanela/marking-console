@@ -905,7 +905,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.17.2';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.18.0';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1034,9 +1034,14 @@ function migrateV1(d) {
   return normalize(out);   // backfill sync timestamps and any missing keys
 }
 
+// Timed cells across every job, rebuilt lazily by historyCells and dropped on
+// any write. Only a cache: correctness never depends on it, and clearing it
+// here means no data change can leave a stale prior behind.
+let histCache = null;
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('Warning: could not save'); }
+  histCache = null;
   scheduleSync();          // auto-push shortly after a data change (if sync is on)
 }
 // Function declaration (hoisted) so load()/migrateV1() can call it before this
@@ -1336,14 +1341,63 @@ function partRemaining(a, pid) { const st = partStats(a, pid); return Math.max(0
 const DEFAULT_PART_MS = 90000;    // 1.5 min x weight, per part
 const DEFAULT_WHOLE_MS = 180000;  // 3 min x weight, for a single-part paper
 const TRUST_N = 10;               // timed papers at which a measurement is trusted outright
-function defaultCellMs(a) { return (isMultiPart(a) ? DEFAULT_PART_MS : DEFAULT_WHOLE_MS) * jobWeight(a); }
-// How much of a cell's price rests on measurement rather than the default:
-// each level is trusted in proportion to the evidence behind it and defers the
-// rest to the next level down.
+// The floor: the owner's own guess, used only until there is anything better.
+function fixedCellMs(a) { return (isMultiPart(a) ? DEFAULT_PART_MS : DEFAULT_WHOLE_MS) * jobWeight(a); }
+
+// Every timed cell in the library, tagged with the kind of job it came from and
+// its difficulty, so a new job can be priced from what jobs like it actually
+// cost rather than from a constant guessed once and never revisited. Archived
+// jobs count: filing a job away does not make it less informative, and learning
+// must not depend on how tidy you are. The job being priced is excluded, since
+// its own cells are already the part and job levels of `cellPriceMs` and
+// letting it vouch for itself would count them twice.
+function historyCells(exceptId) {
+  if (!histCache) {
+    histCache = [];
+    S.assessments.forEach(a => {
+      const kind = isMultiPart(a) ? 'part' : 'whole', w = jobWeight(a);
+      partsOf(a).forEach(p => timedMsIn(a, p.id).forEach(ms => histCache.push({ id: a.id, ms, kind, w })));
+    });
+  }
+  return exceptId ? histCache.filter(c => c.id !== exceptId) : histCache;
+}
+// The learned prior: what a cell of this kind and difficulty has cost you
+// before. Two tiers, because the buckets are thin on a year of marking: cells
+// at this exact difficulty first, then all cells of this kind normalised per
+// difficulty point and scaled back up, so twenty x2 papers also sharpen the
+// first x3 job you meet. Each tier is trusted in proportion to its evidence and
+// defers the rest downward, the same shrinkage as cellPriceMs, so a finished
+// job joining the pool never makes an estimate jump. Nothing is stored: the
+// prior is derived whenever it is wanted, so it cannot drift out of step with
+// the marking it came from.
+function learnedCellMs(a) {
+  const fixed = fixedCellMs(a);
+  const w = jobWeight(a), kind = isMultiPart(a) ? 'part' : 'whole';
+  const hist = historyCells(a && a.id).filter(c => c.kind === kind);
+  if (!hist.length) return { ms: fixed, learned: 0 };
+  const wAll = Math.min(1, hist.length / TRUST_N);
+  const perUnit = median(hist.map(c => Math.round(c.ms / c.w))) * w;
+  const base = wAll * perUnit + (1 - wAll) * fixed;
+  const exact = hist.filter(c => c.w === w).map(c => c.ms);
+  const wExact = Math.min(1, exact.length / TRUST_N);
+  const ms = exact.length ? wExact * median(exact) + (1 - wExact) * base : base;
+  return { ms: Math.round(ms), learned: wExact + (1 - wExact) * wAll };
+}
+// Where a cell's price comes from, as shares that sum to 1: this job's own
+// timings, your past jobs of the same kind, and the bare difficulty constant.
+// Three sources, not two, because the fallback is now your marking as well.
 function cellTrust(a, pid) {
   const wPart = Math.min(1, timedMsIn(a, pid).length / TRUST_N);
   const wJob = Math.min(1, jobTimedMs(a).length / TRUST_N);
-  return wPart + (1 - wPart) * wJob;
+  const own = wPart + (1 - wPart) * wJob;
+  const prior = (1 - own) * learnedCellMs(a).learned;
+  return { own, prior };
+}
+// What a job actually cost: timed cells only, since untimed ones were never on
+// the clock. Used to take stock when a job is archived, and on its card after.
+function jobActual(a) {
+  const ms = jobTimedMs(a);
+  return { n: ms.length, total: ms.reduce((t, x) => t + x, 0), typical: ms.length ? median(ms) : 0 };
 }
 // Price of one cell for planning. Your own times where you have them, the
 // difficulty default where you do not, and a smooth glide between them as
@@ -1351,7 +1405,7 @@ function cellTrust(a, pid) {
 // third timed paper would lurch the headline totals by hours at a stroke, and
 // again on every part. An estimate should creep, not jump.
 function cellPriceMs(a, pid) {
-  const def = defaultCellMs(a);
+  const def = learnedCellMs(a).ms;   // your past jobs like this one, falling back to the difficulty constant
   const own = timedMsIn(a, pid), all = jobTimedMs(a);
   const wJob = Math.min(1, all.length / TRUST_N);
   const base = wJob ? wJob * median(all) + (1 - wJob) * def : def;
@@ -1368,26 +1422,39 @@ function paceJobMs(a) {
 // which is real marking coming at you), what today's target costs, and how much
 // of the figure rests on your own timings rather than the difficulty default.
 function paceTotals() {
-  let left = 0, upcoming = 0, today = 0, trusted = 0, cells = 0;
+  let left = 0, upcoming = 0, today = 0, ownW = 0, priorW = 0, cells = 0;
   S.assessments.forEach(a => {
     if (a.archived) return;
     const st = assessmentStats(a);
     if (st.complete) return;
     const jobMs = paceJobMs(a);
     left += jobMs;
-    partsOf(a).forEach(p => { const n = partRemaining(a, p.id); cells += n; trusted += n * cellTrust(a, p.id); });
+    partsOf(a).forEach(p => {
+      const n = partRemaining(a, p.id), t = cellTrust(a, p.id);
+      cells += n; ownW += n * t.own; priorW += n * t.prior;
+    });
     if (st.upcoming) { upcoming += jobMs; return; }   // in the pipeline, but nothing to mark today
     const perCell = st.remaining ? jobMs / st.remaining : 0;
     if (st.dailyTarget) today += Math.min(perCell * st.dailyTarget, jobMs);
   });
-  const measuredPct = cells ? Math.round(100 * trusted / cells) : 0;
-  return { left, today, upcoming, known: left > 0, measuredPct };
+  const ownPct = cells ? Math.round(100 * ownW / cells) : 0;
+  const priorPct = cells ? Math.round(100 * priorW / cells) : 0;
+  return { left, today, upcoming, known: left > 0, ownPct, priorPct };
 }
-// Says plainly how much of an estimate is yours and how much is assumed.
-function paceSourceTitle(pct) {
-  if (pct >= 99) return 'From your own marking times.';
-  if (pct <= 1) return 'Estimated from the difficulty you set on each job; it will use your own times as you mark.';
-  return `About ${pct}% from your own marking times, the rest estimated from the difficulty you set. It leans further on your times as you mark.`;
+// Says plainly where an estimate comes from.
+// Three sources now, not two: this job's own timings, your past jobs of the
+// same kind and difficulty, and the bare difficulty constant, which is left
+// only until either of the others exists.
+function paceSourceTitle(ownPct, priorPct) {
+  const o = Math.round(ownPct), p = Math.round(priorPct), f = Math.max(0, 100 - o - p);
+  if (o >= 99) return 'From this job’s own marking times.';
+  if (p >= 99) return 'From what your past jobs of this difficulty actually took.';
+  if (f >= 99) return 'Estimated from the difficulty you set; it will use your own times as you mark.';
+  const bits = [];
+  if (o) bits.push(`${o}% from this job so far`);
+  if (p) bits.push(`${p}% from your past jobs like it`);
+  if (f) bits.push(`${f}% from the difficulty you set`);
+  return `Where this comes from: ${bits.join(', ')}. It leans further on your own times as you mark.`;
 }
 
 function fmtClock(ms) {
@@ -1599,7 +1666,7 @@ function renderDashboard() {
         ${progressRing(pct, 108)}
         <div class="overall-txt">
           <span class="dash-bigsub">${denom ? `${marked} of ${denom} marked` : 'nothing to mark yet'}${followup ? ` · ${followup} to follow up` : ''}${nextDue ? ` · next due ${esc(fmtDate(nextDue))}` : ''}${upCells ? ` · ${upCells} upcoming in ${upcoming.length} job${upcoming.length === 1 ? '' : 's'}` : ''}</span>
-          ${pace.known ? `<span class="dash-pace" title="${esc(paceSourceTitle(pace.measuredPct))}">about ${fmtSpan(pace.left)} of marking ahead${pace.upcoming ? ` · ${fmtSpan(pace.upcoming)} of it not yet sat` : ''}</span>` : ''}
+          ${pace.known ? `<span class="dash-pace" title="${esc(paceSourceTitle(pace.ownPct, pace.priorPct))}">about ${fmtSpan(pace.left)} of marking ahead${pace.upcoming ? ` · ${fmtSpan(pace.upcoming)} of it not yet sat` : ''}</span>` : ''}
         </div>
       </div>
     </section>
@@ -1613,7 +1680,7 @@ function renderDashboard() {
           : (list.some(x => !x.complete && !x.upcoming && x.remaining)
             ? 'set due dates on your jobs to get a daily quota'
             : 'nothing left to mark today')}</span>
-        ${(!q.met && pace.today) ? `<span class="dash-pace" title="${esc(paceSourceTitle(pace.measuredPct))}">today’s target ≈ ${fmtSpan(pace.today)} of marking</span>` : ''}
+        ${(!q.met && pace.today) ? `<span class="dash-pace" title="${esc(paceSourceTitle(pace.ownPct, pace.priorPct))}">today’s target ≈ ${fmtSpan(pace.today)} of marking</span>` : ''}
       </div>
       ${quotaRowsHtml(list)}
     </section>
@@ -1838,9 +1905,17 @@ function jobCard(x) {
   else if (x.dailyTarget) pace = `<span class="cc-chip">${x.dailyTarget}/day to finish on time</span>`;
   else pace = `<span class="cc-chip">${x.remaining} to mark</span>`;
   const missChip = x.followup ? `<span class="cc-chip followup">${x.followup} to follow up</span>` : '';
-  // Time left on this job: your own pace where known, its difficulty where not.
-  const jp = (isArch || x.complete) ? 0 : paceJobMs(a);
-  const timeChip = jp ? `<span class="cc-chip cc-time" title="${esc(paceSourceTitle(Math.round(100 * cellTrust(a, partsOf(a)[0].id))))}">~${fmtSpan(jp)}</span>` : '';
+  // A finished job reports what it actually took, so the record stays visible
+  // instead of flashing past once in the archive dialog; an unfinished one
+  // estimates what is left.
+  let timeChip = '';
+  if (isArch || x.complete) {
+    const act = jobActual(a);
+    if (act.n) timeChip = `<span class="cc-chip cc-time" title="Timed marking across ${act.n} ${act.n === 1 ? 'paper' : 'papers'}, typically ${esc(fmtClock(act.typical))} each">took ${fmtSpan(act.total)}</span>`;
+  } else {
+    const jp = paceJobMs(a), tr = cellTrust(a, partsOf(a)[0].id);
+    if (jp) timeChip = `<span class="cc-chip cc-time" title="${esc(paceSourceTitle(100 * tr.own, 100 * tr.prior))}">~${fmtSpan(jp)}</span>`;
+  }
   const resumeBtn = `<button class="btn-resume" onclick="openAssessment('${a.id}')">${x.complete ? 'Review' : 'Resume ›'}</button>`;
   const archBtn = isArch
     ? `<button class="btn-arch" onclick="unarchiveAssessment('${a.id}')">Unarchive</button>`
@@ -2148,7 +2223,7 @@ function timerBarHtml(a, cell) {
     </div>
     <div class="mt-line sub">
       <span class="mt-meta">${bits.join(' · ')}</span>
-      ${est.length ? `<span class="mt-est" title="${esc(paceSourceTitle(Math.round(100 * cellTrust(a, pid))))}">${est.join(' · ')}</span>` : ''}
+      ${est.length ? `<span class="mt-est" title="${esc(paceSourceTitle(100 * cellTrust(a, pid).own, 100 * cellTrust(a, pid).prior))}">${est.join(' · ')}</span>` : ''}
     </div>
     ${focusHtml()}
   </div>`;
@@ -2528,6 +2603,26 @@ function markDone() {
 // When marking has just completed a job, offer to archive it. Fires on the
 // transition into complete only, and flags anything still outstanding (a
 // follow-up owed, a paper under moderation) so "not yet" is an easy choice.
+// Taking stock as a job is filed: what it actually cost, and whether the
+// difficulty you gave it matched. Facts only, and only when there is enough
+// timing to say anything; it is a calibration signal for the next job's weight,
+// not a verdict on this one.
+function jobStockLine(a, st) {
+  const act = jobActual(a);
+  if (!act.n) return '';
+  const w = jobWeight(a), multi = isMultiPart(a);
+  const unit = multi ? 'section' : 'paper';
+  let s = `\n\nThis job: ${st.denom} ${multi ? 'sections' : 'papers'} at ×${w}, ${fmtSpan(act.total)} on the clock across ${act.n}, typically ${fmtClock(act.typical)} a ${unit}.`;
+  const hist = historyCells(a.id).filter(c => c.kind === (multi ? 'part' : 'whole') && c.w === w);
+  if (hist.length >= MIN_SAMPLE) {
+    const other = median(hist.map(c => c.ms));
+    const diff = other ? Math.round(100 * (act.typical - other) / other) : 0;
+    s += ` Your other ×${w} ${unit}s typically take ${fmtClock(other)}`;
+    s += Math.abs(diff) < 10 ? ', so this was about par.'
+      : `, so this ran ${Math.abs(diff)}% ${diff > 0 ? 'slower: worth a higher difficulty next time' : 'faster: worth a lower one next time'}.`;
+  }
+  return s;
+}
 function maybePromptArchive(aid, wasComplete) {
   const a = S.assessments.find(x => x.id === aid);
   if (!a || a.archived || wasComplete) return;
@@ -2538,7 +2633,7 @@ function maybePromptArchive(aid, wasComplete) {
   const flags = Object.values(a.marks || {}).filter(m => m.flag).length;
   if (flags) bits.push(`${flags} paper${flags === 1 ? '' : 's'} flagged for moderation`);
   const note = bits.length ? `\n\nStill outstanding: ${bits.join('; ')}.` : '';
-  if (confirm(`${a.name} is fully marked. Move it to Archived?${note}\n\nYou can un-archive any time.`)) {
+  if (confirm(`${a.name} is fully marked. Move it to Archived?${jobStockLine(a, st)}${note}\n\nYou can un-archive any time.`)) {
     a.archived = true; a.updatedAt = nowISO();
     save(); goDashboard();
     toast(`${a.name} archived`);

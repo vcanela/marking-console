@@ -3,6 +3,33 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.18.0 — 2026-09-19
+
+- Estimates now learn from your finished jobs. Until now a new job was always
+  priced from the fixed guess of 1.5 or 3 minutes per difficulty point, no
+  matter how much marking you had done; that constant never moved. A new job is
+  now priced from what your own past jobs of the same kind and difficulty
+  actually took, and the constant is only the floor beneath that.
+- It learns continuously, not when you archive. A paper's time joins the
+  evidence the moment you mark it, and archived jobs count as much as active
+  ones, so what you learn never depends on how tidy you have been. Nothing is
+  stored: the figure is worked out from your marking whenever it is needed, so
+  it cannot drift out of step with the marking it came from.
+- Difficulty carries across. Twenty ×2 papers also sharpen the first ×3 job you
+  meet, because the rate is learned per difficulty point and scaled back up. A
+  fresh ×3 job that would once have been priced at 9 minutes a paper is priced
+  from what your ×2 marking really costs.
+- It still creeps rather than jumps: each level of evidence is trusted in
+  proportion to how much of it there is, so a job finishing and joining the pool
+  moves an estimate by seconds, not hours. A job is excluded from its own
+  history, so it cannot vouch for itself.
+- Archiving a job now takes stock: the prompt says what it actually cost and how
+  that compares with your other papers of that difficulty, so you can see
+  whether the weight you gave it was right. Finished and archived job cards show
+  what the job took instead of an estimate of what is left.
+- Hovering a time estimate now names all three sources: this job so far, your
+  past jobs like it, and the difficulty you set.
+
 ## 1.17.2 — 2026-09-19
 
 - Fixed a finished job still demanding work in today's quota. The daily target

@@ -468,14 +468,44 @@ due today and handed the deadline day itself out as marking time.
       clipping on top; the median already resists them, and discarding slow
       papers would bias every estimate optimistic.
     - **Every job is priced, including untimed and not-yet-sat ones**
-      (`cellPriceMs`). An untimed job falls back to `defaultCellMs(a)` =
+      (`cellPriceMs`). An untimed job falls back to the **learned prior**
+      (`learnedCellMs`), and only beneath that to `fixedCellMs(a)` =
       `DEFAULT_PART_MS` (1.5 min) × weight per part, or `DEFAULT_WHOLE_MS`
-      (3 min) × weight for a single-part paper, the owner's own figures. A job
-      marked in parts is therefore priced higher in total than the same job
+      (3 min) × weight for a single-part paper, the owner's own guessed figures.
+      A job marked in parts is therefore priced higher in total than the same job
       marked whole, deliberately: each paper is handled once per part.
       Previously an untimed job contributed nothing, so the headline read as a
       total while describing a fraction of the work (26 papers waiting once read
       "about 10m left").
+    - **The prior is learned, not fixed** (`historyCells`/`learnedCellMs`): a
+      new job is priced from what the owner's past jobs of the same kind
+      (parts vs whole) and difficulty actually took. Two tiers, because the
+      buckets are thin over a year: cells at that exact difficulty, then all
+      cells of that kind **normalised per difficulty point** and scaled back up,
+      so ×2 marking sharpens the first ×3 job met. Each tier shrinks toward the
+      next by `min(1, n / TRUST_N)`, as elsewhere, so a job finishing and joining
+      the pool moves an estimate by seconds rather than hours.
+      - **Learning is continuous, never an archive event.** A cell's time is
+        evidence the moment it is marked, and **archived jobs count**: what the
+        tool knows must not depend on how tidy the owner has been. Nothing is
+        stored either, so a derived prior cannot drift out of step with the
+        marking behind it; do not "optimise" this into a saved constant updated
+        on archive, which would need migration and sync-merge rules to boot.
+      - **A job is excluded from its own history** (`historyCells(exceptId)`).
+        Its cells are already the part and job levels of `cellPriceMs`, so
+        including them would let a job vouch for itself and count them twice.
+      - `histCache` memoises the scan and is cleared in `save()`. It is only a
+        cache: correctness never depends on it.
+      - Deliberately **no recency weighting** (pace drifts over a year, but the
+        difference between assessments swamps it and a decay constant is another
+        knob) and **no outlier trimming** (the median resists them; trimming
+        would bias every estimate optimistic).
+    - **Taking stock at archive** (`jobStockLine`, folded into
+      `maybePromptArchive`'s confirm): what the job actually cost and how that
+      compares with past jobs of the same difficulty, so the owner can calibrate
+      the **weight** they give the next one. Facts only, silent without timings.
+      `jobActual(a)` also drives a **"took 1h 12m"** chip on finished and
+      archived cards, in place of the estimate chip those cannot use.
     - **The default gives way to measurement by a glide, never a threshold**:
       `price = w_part·median(part) + (1 − w_part)·[w_job·median(job) +
       (1 − w_job)·default]`, with `w = min(1, samples / TRUST_N)` and
@@ -483,14 +513,16 @@ due today and handed the deadline day itself out as marking time.
       headline by hours the moment a third paper was timed, and again on every
       part; the glide makes it creep like a journey time. A second part inherits
       the job median (`w_job` = 1) rather than reverting to the default.
-      `cellTrust` returns the weight resting on measurement, which
-      `paceSourceTitle` turns into the "X% from your own times" tooltip.
+      `cellTrust` returns the shares `{own, prior}` (this job's timings, and the
+      learned prior; the remainder is the bare difficulty constant), which
+      `paceSourceTitle` turns into a tooltip naming all **three** sources. It is
+      three, not two, because the fallback is now the owner's marking as well.
     - `pacePartMs`/`paceJobMs` multiply the price by remaining cells;
       `paceTotals()` returns `left` (everything unmarked, **including
       `upcoming`** jobs, since a batch sat next week is real work coming),
       `upcoming` (that share, named separately in the dashboard line), `today`
       (the cost of today's targets, excluding upcoming since none of it is
-      markable today) and `measuredPct`. Estimates render in `--info`
+      markable today) and `ownPct`/`priorPct`. Estimates render in `--info`
       (`.dash-pace`, `.cc-time`, `.mt-est`) as derived information.
     - **`MIN_SAMPLE` = 3 still governs the strip's gauge and its "typical"
       readout only** ("learning your pace" until then). Those two claim to know
@@ -599,9 +631,13 @@ paper and resets on every navigation path; Mark done banks the lap onto the cell
 it survives a reload and a sync merge; the gauge tick sits exactly at the typical and
 overruns fill the muted segment without ever going red; estimates stay hidden below
 three timed papers and use the median so an outlier does not skew them; an untimed
-job is still priced from its difficulty and a not-yet-sat job still counts in the
+job is priced from what past jobs of the same kind and difficulty actually took
+(including archived ones, and ×2 history sharpens a first ×3 job), falling back
+to the fixed constant only with no history at all, while a job never feeds its
+own prior; a not-yet-sat job still counts in the
 "marking ahead" total; the estimate glides toward your own times as papers are
-timed instead of jumping at the third; the quota headline equals the sum of its
+timed instead of jumping at the third; archiving a finished job reports what it
+cost against past jobs of that difficulty and the card then shows "took X"; the quota headline equals the sum of its
 bars; idle rollback
 banks only the active time and charges nothing for a walk-away; Mark all and roster
 un-ticks record no time; a focus block counts down, ends green and changes the tab
