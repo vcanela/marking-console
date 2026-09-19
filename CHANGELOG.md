@@ -3,6 +3,15 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.17.1 — 2026-09-19
+
+- Fixed today's quota tally collapsing when you archive a job you finished the
+  same day. Archiving dropped the job from the count entirely, so a morning
+  spent on it stopped counting toward today: finishing and filing a job could
+  take the tally from 13 papers back to 3. Work done today now counts wherever
+  it was done, including a job archived since. Only the target drops when a job
+  leaves the active list, because a finished job owes nothing more today.
+
 ## 1.17.0 — 2026-09-16
 
 - Trip hazards can now belong to a single part, so each question keeps its own

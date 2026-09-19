@@ -905,7 +905,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.17.0';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.17.1';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1482,10 +1482,17 @@ function dailyQuota() {
   // Upcoming jobs are excluded: there is nothing to mark yet, and the per-job
   // bars below already leave them out, so counting them here made the headline
   // disagree with the sum of its own breakdown.
-  S.assessments.filter(a => !a.archived).map(assessmentStats).filter(x => !x.upcoming).forEach(x => {
+  S.assessments.map(assessmentStats).filter(x => !x.upcoming).forEach(x => {
+    // Work done today counts wherever it was done, **including a job archived
+    // since**: archiving files a finished job away, it does not undo the hours
+    // you spent on it this morning. Only the target drops when a job leaves the
+    // active list, because a finished job owes nothing more today. So the tally
+    // can legitimately exceed the sum of the per-job bars below (those show only
+    // active jobs); the *target* still equals their sum, which is the invariant
+    // that matters. Do not "tidy" this back into one filter.
     markedToday += x.markedToday * x.weight;
     papers += x.markedToday;
-    if (x.dailyTarget) targetToday += x.loadTarget;
+    if (!x.a.archived && x.dailyTarget) targetToday += x.loadTarget;
   });
   const toGo = Math.max(0, targetToday - markedToday);
   const pct = targetToday ? Math.min(100, Math.round(100 * markedToday / targetToday)) : (markedToday ? 100 : 0);

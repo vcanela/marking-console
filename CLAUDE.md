@@ -361,7 +361,13 @@ due today and handed the deadline day itself out as marking time.
     blue further out, `.met` green); job cards get a left stripe by state
     (`s-danger`/`s-soon`/`s-info`/`s-success`/`s-idle`) in the same language.
     `dailyQuota()` excludes `upcoming` jobs exactly as the per-job bars do, so
-    the headline always equals the sum of its own breakdown.
+    the headline **target** always equals the sum of its own breakdown. The
+    **tally** is scoped differently on purpose: it counts today's work across
+    every non-upcoming job **including archived ones**, because archiving files a
+    finished job away and must not undo the hours spent on it this morning (it
+    once took the tally from 13 papers back to 3). Only the target is gated on
+    `!x.a.archived`. So the tally may legitimately exceed the sum of the bars
+    below; do not "tidy" the two scopes back into one filter.
     Hues are soft `color-mix` washes over `--panel`; if you add a dashboard
     element, colour it by state from the semantic palette, do not invent a hue.
 14. **Marking runway** (`runwayHtml`/`runwayPick`, dashboard, below the quota):
@@ -414,8 +420,10 @@ due today and handed the deadline day itself out as marking time.
     moderation flag) so **Not yet** is easy; a complete non-archived job also
     carries an Archive button. Archived jobs leave the active list and **every
     headline figure** — Overall progress, the Active-jobs/Remaining/Follow-up
-    tiles, Today's quota (`dailyQuota` filters them), and the runway (already
-    excluded as complete). `renderDashboard` splits `all` into non-archived
+    tiles, Today's quota **target** (`dailyQuota` gates the target on
+    `!archived`), and the runway (already excluded as complete). The one thing
+    archiving does **not** withdraw is today's tally: work done today keeps
+    counting after the job is filed (see behaviour 13). `renderDashboard` splits `all` into non-archived
     `list` (drives the metrics) and `archived`. The flag rides the assessment
     base in `mergeDocs` (newer `updatedAt` wins), so archiving syncs with no
     extra merge code; `normalize` backfills `archived: false`.
@@ -593,8 +601,9 @@ the clock ticks**), the keyboard shortcuts (Enter marks and advances, [ ] step
 students, ? opens the sheet, Esc blurs the notes box then keys work again, keys
 paused while typing), archiving (marking the last paper prompts to archive and
 names outstanding follow-ups/flags; Not yet keeps it active with an Archive
-button; archived jobs drop out of Overall progress/quota/runway/tiles and sit in
-the collapsible Archived section; un-archive restores), the daily quota bar
+button; archived jobs drop out of Overall progress/quota target/runway/tiles and
+sit in the collapsible Archived section, but archiving a job finished today
+leaves today's quota tally intact; un-archive restores), the daily quota bar
 filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
