@@ -905,7 +905,7 @@
 // class. An assessment can optionally be split into parts; the unit of marking
 // is a cell (one student's one part). A single-part assessment uses one
 // implicit part, PART_ALL.
-const VERSION = '1.17.1';   // shown in the header; bump on every change and add a CHANGELOG entry
+const VERSION = '1.17.2';   // shown in the header; bump on every change and add a CHANGELOG entry
 const KEY = 'markingConsole.v3';
 const OLD2_KEY = 'markingConsole.v2';
 const OLD_KEY = 'markingConsole.v1';
@@ -1174,7 +1174,12 @@ function assessmentStats(a) {
   // so it stays stable. With no working days left at all (due today, overdue, or
   // every remaining day crossed out as a rest day) the whole remainder falls due
   // now rather than vanishing from the quota.
-  const dailyTarget = (wdl && wdl > 0) ? Math.ceil((remaining + markedToday) / wdl)
+  // `markedToday` is in the numerator so the target holds steady as you work
+  // through the day rather than shrinking under you. Both branches require
+  // `remaining > 0`: with nothing left the job owes nothing today, and without
+  // that guard a finished job kept demanding ceil(markedToday / wdl) papers, so
+  // the headline quota only dropped when you archived it, not when you finished.
+  const dailyTarget = (remaining > 0 && wdl && wdl > 0) ? Math.ceil((remaining + markedToday) / wdl)
     : (dl !== null && remaining > 0 ? (remaining + markedToday) : null);
   const loadTarget = dailyTarget !== null ? dailyTarget * weight : null;   // effort points for today
   const complete = denom > 0 && remaining === 0;
@@ -1603,7 +1608,11 @@ function renderDashboard() {
       <div class="dash-h">Today’s quota <span class="dash-h-note">load points = papers × difficulty</span></div>
       <div class="dash-hero-top" style="margin-bottom:14px;">
         <span class="dash-bignum${q.met ? ' met' : ''}">${q.markedToday}${q.targetToday ? ` / ${q.targetToday}` : ''}</span>
-        <span class="dash-bigsub">${q.targetToday ? (q.met ? 'quota met for today' : `${q.toGo} load to go today, split by urgency below`) : 'set due dates on your jobs to get a daily quota'}</span>
+        <span class="dash-bigsub">${q.targetToday
+          ? (q.met ? 'quota met for today' : `${q.toGo} load to go today, split by urgency below`)
+          : (list.some(x => !x.complete && !x.upcoming && x.remaining)
+            ? 'set due dates on your jobs to get a daily quota'
+            : 'nothing left to mark today')}</span>
         ${(!q.met && pace.today) ? `<span class="dash-pace" title="${esc(paceSourceTitle(pace.measuredPct))}">today’s target ≈ ${fmtSpan(pace.today)} of marking</span>` : ''}
       </div>
       ${quotaRowsHtml(list)}

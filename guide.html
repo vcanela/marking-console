@@ -69,7 +69,7 @@
 <header>
   <div class="top">
     <h1>Marking Console</h1>
-    <span class="ver" id="ver">Guide · v1.17.1</span>
+    <span class="ver" id="ver">Guide · v1.17.2</span>
     <a class="back-app" href="marking-console.html">Open the app →</a>
   </div>
   <p class="lede">A tracker for working through a large marking load: per paper, per section, across classes and devices.</p>
@@ -119,6 +119,8 @@
   <span class="lab">In the app</span>
   <p>Give each job its own due date when you create it. On the dashboard, <b class="k">Today's quota</b> splits the day across your jobs and orders them by urgency: the Sunday job gets the larger share and sits at the top of the list, with its own small bar of done-versus-target for today.</p>
   <p>Work down that list from the top and you stay on track for every deadline without doing the arithmetic yourself. A job with no due date has nothing to pace against, so it will not appear in the quota split; add a due date to any job you want the day planned around.</p>
+  <span class="lab">If you race ahead on one job</span>
+  <p>Say you ignore the split and push one job all the way to the finish. The other jobs keep the same daily target: each one paces itself against its own deadline and its own remaining papers, so clearing one cannot discharge what another owes by Tuesday. What does drop is the day's total, the moment you finish, since a job with nothing left asks for nothing. Your tally counts everything you did, so the headline will read well past the target, and every following day on the runway gets lighter because that job has left the plan.</p>
   <span class="lab">What a due date means</span>
   <p>Due at the <b>start</b> of that day, since you often see the class first period. So the last day you can mark is the day before, and a job due Friday is paced over Wednesday and Thursday. "1 day left" means due tomorrow, and everything left falls due today. If a job really does give you the whole due date, enter the following day instead.</p>
   <span class="lab">Difficulty</span>
@@ -281,6 +283,14 @@
 <section data-view="changelog" class="detail" hidden>
   <button class="back" data-go="home">← Back</button>
   <h3>Changelog</h3>
+  <div class="rel">
+    <div class="relhead">1.17.2 — 2026-09-19</div>
+    <ul>
+      <li>Fixed a finished job still demanding work in today's quota until you archived it, so the headline disagreed with the sum of its own bars. The day's total now drops the moment you finish a job.</li>
+      <li>With everything finished, Today's quota says "nothing left to mark today" rather than suggesting you set due dates.</li>
+      <li>Racing ahead on one job still does not lower the others: each paces itself against its own deadline and remaining papers. What drops is the day's total, and every following day on the runway.</li>
+    </ul>
+  </div>
   <div class="rel">
     <div class="relhead">1.17.1 — 2026-09-19</div>
     <ul>

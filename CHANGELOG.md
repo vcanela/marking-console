@@ -3,6 +3,22 @@
 Semantic versioning (major.minor.patch). The version also shows in the app
 header and in `guide.html`; keep all three in step on every change.
 
+## 1.17.2 — 2026-09-19
+
+- Fixed a finished job still demanding work in today's quota. The daily target
+  counts what you have already marked today so it holds steady as you work
+  rather than shrinking under you, but with nothing left to mark that term
+  turned into a phantom demand: finishing a job left its target in the headline
+  until you archived it, so the headline disagreed with the sum of its own bars
+  (34 against 14). A job with nothing remaining now owes nothing today, so the
+  day's total drops the moment you finish, not when you file it away.
+- With every job finished, Today's quota now says "nothing left to mark today"
+  instead of suggesting you set due dates.
+- Finishing one job early still does not lower the other jobs' targets, which is
+  deliberate: each job paces itself against its own deadline and its own
+  remaining papers, so clearing one cannot discharge what another owes. What
+  does change is the total, today and on every following day of the runway.
+
 ## 1.17.1 — 2026-09-19
 
 - Fixed today's quota tally collapsing when you archive a job you finished the

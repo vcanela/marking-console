@@ -196,7 +196,16 @@ due today and handed the deadline day itself out as marking time.
    not `dl > 0`. `isOverdue(a)` (a plain `dueDate < todayStr()` comparison)
    separates "overdue" from "due today" in the chip, since `dl` clamps at 0.
    Cells marked today count toward today, so the target stays stable through the
-   day. **Load points** = paper target ×
+   day rather than shrinking under the owner as they work. **Both branches of
+   `dailyTarget` require `remaining > 0`**: with nothing left a job owes nothing
+   today, and without that guard the `markedToday` term turned into a phantom
+   demand (`ceil(markedToday / wdl)`), so a finished job kept its target in the
+   headline until it was archived and the headline disagreed with the sum of its
+   own bars (34 against 14). Per-job targets are **independent by design**:
+   racing ahead on one job does not lower another's, because each paces itself
+   against its own deadline and its own remaining papers, and clearing one
+   cannot discharge what another owes. What drops is the day's total, and every
+   following day of the runway. **Load points** = paper target ×
    the job's `weight` (1/2/3); `dailyQuota` sums load points across active dated
    jobs so a tricky job counts more, and the runway shades by effort the same
    way. Weight only scales pacing: **percentage and progress stay a plain paper
@@ -603,7 +612,11 @@ paused while typing), archiving (marking the last paper prompts to archive and
 names outstanding follow-ups/flags; Not yet keeps it active with an Archive
 button; archived jobs drop out of Overall progress/quota target/runway/tiles and
 sit in the collapsible Archived section, but archiving a job finished today
-leaves today's quota tally intact; un-archive restores), the daily quota bar
+leaves today's quota tally intact, and the target must already have dropped when
+the job was finished rather than when it was filed; un-archive restores),
+racing ahead on one job (its own target holds steady as you work and the other
+jobs' targets do not move, but the day's total falls the moment that job is
+finished, and the runway's later days lighten), the daily quota bar
 filling and turning
 green (and the quote on meeting it), both clipboard exports, JSON
 export/import round-trip, theme toggle, v2→v3 and v1→v3 migration (load with
